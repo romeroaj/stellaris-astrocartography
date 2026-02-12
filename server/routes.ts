@@ -1,11 +1,461 @@
 import type { Express } from "express";
 import { createServer, type Server } from "node:http";
+import { storage } from "./storage";
+import type { User } from "@shared/schema";
+import {
+  createToken,
+  verifyMagicToken,
+  generateMagicToken,
+  verifyAppleToken,
+  verifyGoogleToken,
+  requireAuth,
+  optionalAuth,
+  type AuthenticatedRequest,
+} from "./auth";
+import { sendMagicLinkEmail } from "./email";
+
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "")
+    .slice(0, 30);
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  // ════════════════════════════════════════════════════════════════
+  //  AUTH ROUTES
+  // ════════════════════════════════════════════════════════════════
+
+  /**
+   * POST /api/auth/register
+   * Body: { email: string }
+   * Sends a magic link email — creates user if new.
+   */
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      const magicToken = generateMagicToken(normalizedEmail);
+      const result = await sendMagicLinkEmail(normalizedEmail, magicToken);
+
+      if (!result.success) {
+        return res.status(500).json({ error: result.error || "Failed to send email" });
+      }
+
+      res.json({ success: true, message: "Check your email for a sign-in link" });
+    } catch (err: any) {
+      console.error("Register error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  /**
+   * POST /api/auth/verify
+   * Body: { token: string }
+   * Verifies the magic link token, creates user if new, returns JWT.
+   */
+  app.post("/api/auth/verify", async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json({ error: "Token is required" });
+      }
+
+      const email = verifyMagicToken(token);
+      if (!email) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+
+      // Find or create user
+      let user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Auto-generate username from email prefix
+        const emailPrefix = email.split("@")[0];
+        let username = slugify(emailPrefix);
+
+        // Ensure uniqueness
+        let existing = await storage.getUserByUsername(username);
+        let suffix = 1;
+        while (existing) {
+          username = slugify(emailPrefix) + suffix;
+          existing = await storage.getUserByUsername(username);
+          suffix++;
+        }
+
+        user = await storage.createUser({
+          email,
+          username,
+          displayName: emailPrefix,
+          authProvider: "email",
+        });
+      }
+
+      const jwt = await createToken(user.id, user.username, user.email || undefined);
+      res.json({ token: jwt, user: sanitizeUser(user) });
+    } catch (err: any) {
+      console.error("Verify error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  /**
+   * POST /api/auth/social
+   * Body: { provider: "apple" | "google", idToken: string, displayName?: string }
+   * Verifies the social ID token, creates user if new, returns JWT.
+   */
+  app.post("/api/auth/social", async (req, res) => {
+    try {
+      const { provider, idToken, displayName } = req.body;
+      if (!provider || !idToken) {
+        return res.status(400).json({ error: "Provider and idToken are required" });
+      }
+
+      let sub: string;
+      let email: string | undefined;
+      let name: string | undefined;
+      let avatar: string | undefined;
+
+      if (provider === "apple") {
+        const appleData = await verifyAppleToken(idToken);
+        if (!appleData) {
+          return res.status(401).json({ error: "Invalid Apple token" });
+        }
+        sub = appleData.sub;
+        email = appleData.email;
+        name = displayName;
+      } else if (provider === "google") {
+        const googleData = await verifyGoogleToken(idToken);
+        if (!googleData) {
+          return res.status(401).json({ error: "Invalid Google token" });
+        }
+        sub = googleData.sub;
+        email = googleData.email;
+        name = googleData.name || displayName;
+        avatar = googleData.picture;
+      } else {
+        return res.status(400).json({ error: "Unsupported provider" });
+      }
+
+      // Find existing user by provider ID
+      let user = await storage.getUserByProviderId(provider, sub);
+
+      // Or match by email
+      if (!user && email) {
+        user = await storage.getUserByEmail(email);
+        if (user) {
+          // Link this social provider to existing account
+          await storage.updateUser(user.id, {
+            authProvider: provider,
+            authProviderId: sub,
+          });
+        }
+      }
+
+      // Create new user
+      if (!user) {
+        const baseName = name || email?.split("@")[0] || "user";
+        let username = slugify(baseName);
+
+        let existing = await storage.getUserByUsername(username);
+        let suffix = 1;
+        while (existing) {
+          username = slugify(baseName) + suffix;
+          existing = await storage.getUserByUsername(username);
+          suffix++;
+        }
+
+        user = await storage.createUser({
+          email: email || null,
+          username,
+          displayName: name || baseName,
+          authProvider: provider,
+          authProviderId: sub,
+        });
+
+        if (avatar) {
+          await storage.updateUser(user.id, { avatarUrl: avatar });
+          user.avatarUrl = avatar;
+        }
+      }
+
+      const jwt = await createToken(user.id, user.username, user.email || undefined);
+      res.json({ token: jwt, user: sanitizeUser(user) });
+    } catch (err: any) {
+      console.error("Social auth error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  /**
+   * GET /api/auth/me
+   * Returns the current authenticated user.
+   */
+  app.get("/api/auth/me", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = await storage.getUser(req.userId!);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({ user: sanitizeUser(user) });
+    } catch (err: any) {
+      console.error("Me error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  /**
+   * POST /api/auth/username
+   * Body: { username: string }
+   * Set or update username.
+   */
+  app.post("/api/auth/username", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { username } = req.body;
+      if (!username || typeof username !== "string") {
+        return res.status(400).json({ error: "Username is required" });
+      }
+
+      const clean = slugify(username);
+      if (clean.length < 3) {
+        return res.status(400).json({ error: "Username must be at least 3 characters" });
+      }
+
+      // Check availability
+      const existing = await storage.getUserByUsername(clean);
+      if (existing && existing.id !== req.userId) {
+        return res.status(409).json({ error: "Username already taken" });
+      }
+
+      const user = await storage.updateUser(req.userId!, { username: clean });
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const jwt = await createToken(user.id, user.username, user.email || undefined);
+      res.json({ token: jwt, user: sanitizeUser(user) });
+    } catch (err: any) {
+      console.error("Username error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  //  USER SEARCH
+  // ════════════════════════════════════════════════════════════════
+
+  app.get("/api/users/search", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const q = (req.query.q as string || "").trim();
+      if (q.length < 2) {
+        return res.json({ users: [] });
+      }
+      const results = await storage.searchUsers(q);
+      res.json({
+        users: results
+          .filter((u) => u.id !== req.userId)
+          .map(sanitizeUser),
+      });
+    } catch (err: any) {
+      console.error("User search error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  //  BIRTH PROFILES
+  // ════════════════════════════════════════════════════════════════
+
+  app.get("/api/profiles", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const profiles = await storage.getProfilesByUserId(req.userId!);
+      res.json({ profiles });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/profiles", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { name, birthDate, birthTime, latitude, longitude, locationName, isActive } = req.body;
+      const profile = await storage.createProfile({
+        userId: req.userId!,
+        name,
+        birthDate,
+        birthTime,
+        latitude,
+        longitude,
+        locationName,
+        isActive: isActive ?? false,
+      });
+      res.json({ profile });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.put("/api/profiles/:id", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = req.params.id as string;
+      const profile = await storage.getProfile(id);
+      if (!profile || profile.userId !== req.userId) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+      const updated = await storage.updateProfile(id, req.body);
+      res.json({ profile: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/profiles/:id", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = req.params.id as string;
+      const profile = await storage.getProfile(id);
+      if (!profile || profile.userId !== req.userId) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+      await storage.deleteProfile(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/profiles/:id/activate", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = req.params.id as string;
+      await storage.setActiveProfile(req.userId!, id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  //  FRIENDS
+  // ════════════════════════════════════════════════════════════════
+
+  app.get("/api/friends", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const friends = await storage.getFriends(req.userId!);
+      res.json({
+        friends: friends.map((f) => ({
+          friendshipId: f.id,
+          user: sanitizeUser(f.friend),
+          since: f.updatedAt,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/friends/pending", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const pending = await storage.getPendingRequests(req.userId!);
+      res.json({
+        requests: pending.map((p) => ({
+          friendshipId: p.id,
+          user: sanitizeUser(p.requester),
+          sentAt: p.createdAt,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/friends/request", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { userId: addresseeId } = req.body;
+      if (!addresseeId) {
+        return res.status(400).json({ error: "userId is required" });
+      }
+      if (addresseeId === req.userId) {
+        return res.status(400).json({ error: "Cannot friend yourself" });
+      }
+
+      // Check if friendship already exists
+      const existing = await storage.getFriendship(req.userId!, addresseeId);
+      if (existing) {
+        return res.status(409).json({ error: "Friendship already exists", status: existing.status });
+      }
+
+      const friendship = await storage.sendFriendRequest(req.userId!, addresseeId);
+      res.json({ friendship });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/friends/respond", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { friendshipId, action } = req.body;
+      if (!friendshipId || !["accept", "block"].includes(action)) {
+        return res.status(400).json({ error: "friendshipId and action (accept/block) are required" });
+      }
+
+      const status = action === "accept" ? "accepted" : "blocked";
+      const updated = await storage.respondToFriendRequest(friendshipId, status);
+      if (!updated) {
+        return res.status(404).json({ error: "Friend request not found" });
+      }
+
+      res.json({ friendship: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/friends/:friendId", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const friendId = req.params.friendId as string;
+      await storage.removeFriend(req.userId!, friendId);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/friends/:friendId/profile", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const friendId = req.params.friendId as string;
+      // Verify they are actually friends
+      const friendship = await storage.getFriendship(req.userId!, friendId);
+      if (!friendship || friendship.status !== "accepted") {
+        return res.status(403).json({ error: "Not friends" });
+      }
+
+      const profiles = await storage.getProfilesByUserId(friendId);
+      const activeProfile = profiles.find((p) => p.isActive) || profiles[0];
+      if (!activeProfile) {
+        return res.status(404).json({ error: "Friend has no profile" });
+      }
+
+      res.json({ profile: activeProfile });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════
 
   const httpServer = createServer(app);
-
   return httpServer;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+
+function sanitizeUser(user: User) {
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    createdAt: user.createdAt,
+  };
 }

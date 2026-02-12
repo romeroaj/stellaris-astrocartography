@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useCallback } from "react";
 import { View, StyleSheet } from "react-native";
 import { AstroLine } from "@/lib/types";
 import Colors from "@/constants/colors";
+import { classifyLine, SENTIMENT_COLORS, SENTIMENT_LABELS } from "@/lib/lineClassification";
 
 interface AstroMapProps {
   lines: AstroLine[];
   birthLat: number;
   birthLon: number;
   onLinePress?: (line: AstroLine) => void;
+  colorMode?: "planet" | "simplified";
 }
 
 let leafletLoaded = false;
@@ -44,7 +46,7 @@ function getDashArray(lineType: string): string | undefined {
   return dashes[lineType] || undefined;
 }
 
-export default function AstroMap({ lines, birthLat, birthLon, onLinePress }: AstroMapProps) {
+export default function AstroMap({ lines, birthLat, birthLon, onLinePress, colorMode = "planet" }: AstroMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const layerGroupRef = useRef<any>(null);
@@ -54,6 +56,9 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress }: Ast
   const linesRef = useRef(lines);
   linesRef.current = lines;
 
+  const colorModeRef = useRef(colorMode);
+  colorModeRef.current = colorMode;
+
   const updateLines = useCallback(() => {
     const L = (window as any).L;
     if (!L || !mapRef.current || !layerGroupRef.current) return;
@@ -61,7 +66,13 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress }: Ast
     layerGroupRef.current.clearLayers();
 
     linesRef.current.forEach((line) => {
-      const color = Colors.planets[line.planet] || "#FFFFFF";
+      let color: string;
+      if (colorModeRef.current === "simplified") {
+        const classification = classifyLine(line.planet, line.lineType);
+        color = SENTIMENT_COLORS[classification.sentiment];
+      } else {
+        color = Colors.planets[line.planet] || "#FFFFFF";
+      }
       const dashArray = getDashArray(line.lineType);
       const weight = line.lineType === "MC" || line.lineType === "IC" ? 3 : 2.5;
 
@@ -82,7 +93,12 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress }: Ast
       const lt = Colors.lineTypes[line.lineType];
       const label = lt ? lt.label : line.lineType;
       const planetName = line.planet.charAt(0).toUpperCase() + line.planet.slice(1);
-      polyline.bindTooltip(`${planetName} ${label}`, {
+      let tooltipText = `${planetName} ${label}`;
+      if (colorModeRef.current === "simplified") {
+        const cls = classifyLine(line.planet, line.lineType);
+        tooltipText += ` · ${SENTIMENT_LABELS[cls.sentiment]}`;
+      }
+      polyline.bindTooltip(tooltipText, {
         sticky: true,
         className: "astro-tooltip",
         opacity: 0.95,
@@ -175,7 +191,7 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress }: Ast
 
   useEffect(() => {
     updateLines();
-  }, [lines, updateLines]);
+  }, [lines, colorMode, updateLines]);
 
   return (
     <View style={styles.webMap}>

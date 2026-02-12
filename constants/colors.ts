@@ -55,6 +55,11 @@ const Colors = {
     ASC: { label: "Ascendant", dash: [2, 3] },
     DSC: { label: "Descendant", dash: [12, 4, 2, 4] },
   } as Record<string, { label: string; dash: number[] }>,
+  sentiment: {
+    positive: "#10B981",
+    difficult: "#EF4444",
+    neutral: "#F59E0B",
+  } as Record<string, string>,
 };
 
 export default Colors;

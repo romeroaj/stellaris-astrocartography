@@ -29,6 +29,12 @@ import {
   getPlanetSymbol,
   getPlanetIcon,
 } from "@/lib/interpretations";
+import {
+  classifyLine,
+  SENTIMENT_COLORS,
+  SENTIMENT_LABELS,
+  LineSentiment,
+} from "@/lib/lineClassification";
 
 const ALL_PLANETS: PlanetName[] = [
   "sun", "moon", "mercury", "venus", "mars",
@@ -46,7 +52,8 @@ export default function InsightsScreen() {
     lat: number;
     lon: number;
   } | null>(null);
-  const [activeTab, setActiveTab] = useState<"lines" | "explore">("lines");
+  const [activeTab, setActiveTab] = useState<"great" | "explore">("great");
+  const [keywordFilter, setKeywordFilter] = useState("");
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
@@ -114,6 +121,98 @@ export default function InsightsScreen() {
     }
   };
 
+  // ── Great Places computation ────────────────────────────────────
+  const WORLD_CITIES = useMemo(() => [
+    { name: "New York", country: "USA", lat: 40.7128, lon: -74.006 },
+    { name: "Los Angeles", country: "USA", lat: 34.0522, lon: -118.2437 },
+    { name: "London", country: "UK", lat: 51.5074, lon: -0.1278 },
+    { name: "Paris", country: "France", lat: 48.8566, lon: 2.3522 },
+    { name: "Tokyo", country: "Japan", lat: 35.6762, lon: 139.6503 },
+    { name: "Sydney", country: "Australia", lat: -33.8688, lon: 151.2093 },
+    { name: "Bali", country: "Indonesia", lat: -8.3405, lon: 115.092 },
+    { name: "Barcelona", country: "Spain", lat: 41.3851, lon: 2.1734 },
+    { name: "Rome", country: "Italy", lat: 41.9028, lon: 12.4964 },
+    { name: "Berlin", country: "Germany", lat: 52.52, lon: 13.405 },
+    { name: "Dubai", country: "UAE", lat: 25.2048, lon: 55.2708 },
+    { name: "Bangkok", country: "Thailand", lat: 13.7563, lon: 100.5018 },
+    { name: "Mexico City", country: "Mexico", lat: 19.4326, lon: -99.1332 },
+    { name: "Buenos Aires", country: "Argentina", lat: -34.6037, lon: -58.3816 },
+    { name: "Cape Town", country: "South Africa", lat: -33.9249, lon: 18.4241 },
+    { name: "Mumbai", country: "India", lat: 19.076, lon: 72.8777 },
+    { name: "Lisbon", country: "Portugal", lat: 38.7223, lon: -9.1393 },
+    { name: "Amsterdam", country: "Netherlands", lat: 52.3676, lon: 4.9041 },
+    { name: "Seoul", country: "South Korea", lat: 37.5665, lon: 126.978 },
+    { name: "Istanbul", country: "Turkey", lat: 41.0082, lon: 28.9784 },
+    { name: "Cairo", country: "Egypt", lat: 30.0444, lon: 31.2357 },
+    { name: "Rio de Janeiro", country: "Brazil", lat: -22.9068, lon: -43.1729 },
+    { name: "Vancouver", country: "Canada", lat: 49.2827, lon: -123.1207 },
+    { name: "Honolulu", country: "USA", lat: 21.3069, lon: -157.8583 },
+    { name: "Reykjavik", country: "Iceland", lat: 64.1466, lon: -21.9426 },
+    { name: "Marrakech", country: "Morocco", lat: 31.6295, lon: -7.9811 },
+    { name: "Athens", country: "Greece", lat: 37.9838, lon: 23.7275 },
+    { name: "Singapore", country: "Singapore", lat: 1.3521, lon: 103.8198 },
+    { name: "San Francisco", country: "USA", lat: 37.7749, lon: -122.4194 },
+    { name: "Miami", country: "USA", lat: 25.7617, lon: -80.1918 },
+  ], []);
+
+  interface GreatPlace {
+    name: string;
+    country: string;
+    lat: number;
+    lon: number;
+    positiveLines: { planet: PlanetName; lineType: string; distance: number; keywords: string[]; sentiment: LineSentiment }[];
+    score: number;
+  }
+
+  const greatPlaces = useMemo((): GreatPlace[] => {
+    if (astroLines.length === 0) return [];
+
+    const results: GreatPlace[] = [];
+
+    for (const city of WORLD_CITIES) {
+      const nearby = findNearestLines(astroLines, city.lat, city.lon, 15);
+      const positiveLines: GreatPlace["positiveLines"] = [];
+
+      for (const item of nearby) {
+        const cls = classifyLine(item.planet, item.lineType);
+        positiveLines.push({
+          planet: item.planet,
+          lineType: item.lineType,
+          distance: item.distance,
+          keywords: cls.keywords,
+          sentiment: cls.sentiment,
+        });
+      }
+
+      // Score: heavily weight positive lines, slightly penalize difficult
+      const posCount = positiveLines.filter((l) => l.sentiment === "positive").length;
+      const proximity = positiveLines
+        .filter((l) => l.sentiment === "positive")
+        .reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0);
+      const score = posCount * 10 + proximity * 5;
+
+      if (posCount > 0) {
+        results.push({
+          ...city,
+          positiveLines,
+          score,
+        });
+      }
+    }
+
+    return results.sort((a, b) => b.score - a.score);
+  }, [astroLines, WORLD_CITIES]);
+
+  const filteredGreatPlaces = useMemo(() => {
+    if (!keywordFilter.trim()) return greatPlaces;
+    const term = keywordFilter.toLowerCase().trim();
+    return greatPlaces.filter((place) =>
+      place.positiveLines.some((line) =>
+        line.keywords.some((kw) => kw.includes(term))
+      )
+    );
+  }, [greatPlaces, keywordFilter]);
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -136,14 +235,14 @@ export default function InsightsScreen() {
         <Text style={styles.screenTitle}>Insights</Text>
         <View style={styles.tabRow}>
           <Pressable
-            style={[styles.tab, activeTab === "lines" && styles.tabActive]}
+            style={[styles.tab, activeTab === "great" && styles.tabActive]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setActiveTab("lines");
+              setActiveTab("great");
             }}
           >
-            <Text style={[styles.tabText, activeTab === "lines" && styles.tabTextActive]}>
-              Your Lines
+            <Text style={[styles.tabText, activeTab === "great" && styles.tabTextActive]}>
+              Great Places
             </Text>
           </Pressable>
           <Pressable
@@ -160,59 +259,150 @@ export default function InsightsScreen() {
         </View>
       </View>
 
-      {activeTab === "lines" ? (
+      {activeTab === "great" ? (
         <ScrollView
           style={styles.content}
           contentContainerStyle={styles.contentInner}
           showsVerticalScrollIndicator={false}
         >
-          {ALL_PLANETS.map((planet) => (
-            <View key={planet} style={styles.planetSection}>
-              <View style={styles.planetHeader}>
-                <View style={[styles.planetIcon, { backgroundColor: Colors.planets[planet] + "20" }]}>
-                  <Ionicons
-                    name={getPlanetIcon(planet) as any}
-                    size={18}
-                    color={Colors.planets[planet]}
-                  />
-                </View>
-                <Text style={[styles.planetName, { color: Colors.planets[planet] }]}>
-                  {getPlanetSymbol(planet)}
+          <Text style={styles.exploreDesc}>
+            Discover the best places in the world for you based on your positive planetary lines.
+          </Text>
+
+          <View style={styles.searchRow}>
+            <TextInput
+              style={styles.searchInput}
+              value={keywordFilter}
+              onChangeText={setKeywordFilter}
+              placeholder="Filter by keyword (love, career, home...)"
+              placeholderTextColor={Colors.dark.textMuted}
+              returnKeyType="search"
+            />
+            {keywordFilter.length > 0 && (
+              <Pressable
+                style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => setKeywordFilter("")}
+              >
+                <Ionicons name="close" size={20} color={Colors.dark.background} />
+              </Pressable>
+            )}
+          </View>
+
+          {/* Keyword suggestion chips */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.keywordChipRow}
+            contentContainerStyle={{ gap: 8, paddingBottom: 16 }}
+          >
+            {["love", "career", "home", "creativity", "luck", "spiritual", "travel", "healing"].map((kw) => (
+              <Pressable
+                key={kw}
+                style={[
+                  styles.keywordChip,
+                  keywordFilter.toLowerCase() === kw && styles.keywordChipActive,
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setKeywordFilter(keywordFilter.toLowerCase() === kw ? "" : kw);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.keywordChipText,
+                    keywordFilter.toLowerCase() === kw && styles.keywordChipTextActive,
+                  ]}
+                >
+                  {kw}
                 </Text>
-              </View>
-              <View style={styles.linesGrid}>
-                {(["MC", "IC", "ASC", "DSC"] as LineType[]).map((lineType) => {
-                  const interp = getInterpretation(planet, lineType);
-                  return (
-                    <Pressable
-                      key={`${planet}-${lineType}`}
-                      style={({ pressed }) => [
-                        styles.lineCard,
-                        pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
-                      ]}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push({
-                          pathname: "/line-detail",
-                          params: { planet, lineType },
-                        });
-                      }}
-                    >
-                      <View style={styles.lineCardHeader}>
-                        <Text style={styles.lineTypeTag}>
-                          {Colors.lineTypes[lineType]?.label || lineType}
-                        </Text>
-                        <Ionicons name="chevron-forward" size={14} color={Colors.dark.textMuted} />
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          {filteredGreatPlaces.length > 0 ? (
+            <View style={styles.analysisContainer}>
+              {filteredGreatPlaces.map((place, i) => {
+                const posLines = place.positiveLines.filter((l) => l.sentiment === "positive");
+                const relevantLines = keywordFilter.trim()
+                  ? place.positiveLines.filter((l) =>
+                    l.keywords.some((kw) => kw.includes(keywordFilter.toLowerCase().trim()))
+                  )
+                  : posLines;
+                return (
+                  <View key={`${place.name}-${i}`} style={styles.greatPlaceCard}>
+                    <View style={styles.greatPlaceHeader}>
+                      <View style={styles.greatPlaceRank}>
+                        <Text style={styles.greatPlaceRankText}>#{i + 1}</Text>
                       </View>
-                      <Text style={styles.lineCardDesc} numberOfLines={2}>
-                        {interp.shortDesc}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.greatPlaceName}>{place.name}</Text>
+                        <Text style={styles.greatPlaceCountry}>{place.country}</Text>
+                      </View>
+                      <View style={styles.greatPlaceBadge}>
+                        <Ionicons name="star" size={12} color={Colors.dark.primary} />
+                        <Text style={styles.greatPlaceBadgeText}>
+                          {posLines.length} positive
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.greatPlaceLines}>
+                      {relevantLines.slice(0, 4).map((line, j) => (
+                        <Pressable
+                          key={`${line.planet}-${line.lineType}-${j}`}
+                          style={({ pressed }) => [
+                            styles.greatPlaceLineItem,
+                            pressed && { opacity: 0.7 },
+                          ]}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            router.push({
+                              pathname: "/line-detail",
+                              params: { planet: line.planet, lineType: line.lineType },
+                            });
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles.greatPlaceLineDot,
+                              { backgroundColor: SENTIMENT_COLORS[line.sentiment] },
+                            ]}
+                          />
+                          <Text style={styles.greatPlaceLineText}>
+                            {getPlanetSymbol(line.planet)} {Colors.lineTypes[line.lineType]?.label}
+                          </Text>
+                          <Text style={styles.greatPlaceLineDist}>
+                            {Math.round(line.distance)} km
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    {relevantLines.length > 0 && (
+                      <View style={styles.greatPlaceThemes}>
+                        {relevantLines
+                          .flatMap((l) => l.keywords.slice(0, 3))
+                          .filter((v, i, a) => a.indexOf(v) === i)
+                          .slice(0, 5)
+                          .map((theme) => (
+                            <View key={theme} style={styles.themeBadge}>
+                              <Text style={styles.themeBadgeText}>{theme}</Text>
+                            </View>
+                          ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </View>
-          ))}
+          ) : (
+            <View style={styles.noResults}>
+              <Ionicons name="telescope-outline" size={32} color={Colors.dark.textMuted} />
+              <Text style={styles.noResultsText}>
+                {keywordFilter
+                  ? `No great places found for "${keywordFilter}"`
+                  : "No great places found"}
+              </Text>
+            </View>
+          )}
           <View style={{ height: 120 }} />
         </ScrollView>
       ) : (
@@ -568,5 +758,127 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Outfit_500Medium",
     color: Colors.dark.text,
+  },
+  // ── Great Places styles ──────────────────────────
+  keywordChipRow: {
+    flexGrow: 0,
+  },
+  keywordChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.dark.card,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+  },
+  keywordChipActive: {
+    backgroundColor: Colors.dark.primaryMuted,
+    borderColor: Colors.dark.primary,
+  },
+  keywordChipText: {
+    fontSize: 13,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.textSecondary,
+    textTransform: "capitalize" as const,
+  },
+  keywordChipTextActive: {
+    color: Colors.dark.primary,
+  },
+  greatPlaceCard: {
+    backgroundColor: Colors.dark.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+  },
+  greatPlaceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
+  greatPlaceRank: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.dark.primaryMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  greatPlaceRankText: {
+    fontSize: 13,
+    fontFamily: "Outfit_700Bold",
+    color: Colors.dark.primary,
+  },
+  greatPlaceName: {
+    fontSize: 16,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.text,
+  },
+  greatPlaceCountry: {
+    fontSize: 12,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textMuted,
+    marginTop: 1,
+  },
+  greatPlaceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: Colors.dark.primaryMuted,
+  },
+  greatPlaceBadgeText: {
+    fontSize: 11,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.primary,
+  },
+  greatPlaceLines: {
+    gap: 6,
+    marginBottom: 10,
+  },
+  greatPlaceLineItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 10,
+  },
+  greatPlaceLineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  greatPlaceLineText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.text,
+  },
+  greatPlaceLineDist: {
+    fontSize: 11,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textMuted,
+  },
+  greatPlaceThemes: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  themeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: Colors.dark.secondaryMuted,
+  },
+  themeBadgeText: {
+    fontSize: 11,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.secondary,
+    textTransform: "capitalize" as const,
   },
 });

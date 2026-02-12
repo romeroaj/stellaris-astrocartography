@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
+import { AuthProvider } from "@/lib/AuthContext";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -23,6 +24,8 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#0B1026" } }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="onboarding" options={{ presentation: "fullScreenModal", animation: "fade" }} />
+      <Stack.Screen name="auth" options={{ presentation: "fullScreenModal", animation: "fade" }} />
+      <Stack.Screen name="friends" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="line-detail" options={{ presentation: "modal" }} />
     </Stack>
   );
@@ -48,13 +51,16 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <KeyboardProvider>
-            <StatusBar style="light" />
-            <RootLayoutNav />
-          </KeyboardProvider>
-        </GestureHandlerRootView>
+        <AuthProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <KeyboardProvider>
+              <StatusBar style="light" />
+              <RootLayoutNav />
+            </KeyboardProvider>
+          </GestureHandlerRootView>
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
 }
+

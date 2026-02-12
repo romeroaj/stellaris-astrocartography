@@ -399,13 +399,13 @@ export function generateAstroLines(
     const icLon = normalizeLon(mcLon + 180);
 
     const mcPoints: { latitude: number; longitude: number }[] = [];
-    for (let lat = -80; lat <= 80; lat += 2) {
+    for (let lat = -89; lat <= 89; lat += 2) {
       mcPoints.push({ latitude: lat, longitude: mcLon });
     }
     lines.push({ planet: planet.name, lineType: "MC", points: mcPoints });
 
     const icPoints: { latitude: number; longitude: number }[] = [];
-    for (let lat = -80; lat <= 80; lat += 2) {
+    for (let lat = -89; lat <= 89; lat += 2) {
       icPoints.push({ latitude: lat, longitude: icLon });
     }
     lines.push({ planet: planet.name, lineType: "IC", points: icPoints });
@@ -413,18 +413,33 @@ export function generateAstroLines(
     const ascPoints: { latitude: number; longitude: number }[] = [];
     const dscPoints: { latitude: number; longitude: number }[] = [];
 
-    for (let lat = -75; lat <= 75; lat += 1) {
+    // Use finer steps for better resolution and coverage
+    // Loop from -89 to +89
+    let lat = -89;
+    while (lat <= 89) {
       const tanPhi = Math.tan(lat * DEG);
       const tanDec = Math.tan(planet.dec * DEG);
       const cosH = -(tanPhi * tanDec);
 
-      if (Math.abs(cosH) <= 1) {
-        const H = Math.acos(cosH) * RAD;
+      // Allow small epsilon for float precision issues
+      if (Math.abs(cosH) <= 1.000001) {
+        // Clamp to [-1, 1] to be safe for acos
+        const clampedCosH = Math.max(-1, Math.min(1, cosH));
+        const H = Math.acos(clampedCosH) * RAD;
+
         const ascLon = normalizeLon(planet.ra - gst - H);
         const dscLon = normalizeLon(planet.ra - gst + H);
+
         ascPoints.push({ latitude: lat, longitude: ascLon });
         dscPoints.push({ latitude: lat, longitude: dscLon });
       }
+
+      // Variable step size: finer near poles where curvature is high
+      // This prevents jagged lines or premature cutoffs
+      const step = Math.abs(lat) > 60 ? 0.5 : 1;
+      lat += step;
+      // Fix float accumulation
+      lat = Math.round(lat * 10) / 10;
     }
 
     if (ascPoints.length > 2) {

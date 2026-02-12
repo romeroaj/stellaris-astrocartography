@@ -12,6 +12,9 @@ import {
   Animated as RNAnimated,
   Dimensions,
   FlatList,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -555,23 +558,30 @@ export default function OnboardingScreen() {
       colors={["#0B1026", "#141A38", "#1C2451"]}
       style={styles.container}
     >
-      <View style={[styles.inner, { paddingTop: topInset + 16, paddingBottom: bottomInset + 16 }]}>
-        {step !== "ftux" && (
-          <Pressable
-            style={styles.backButton}
-            onPress={() => {
-              const idx = stepsForIndicator.indexOf(step);
-              if (idx > 0) animateTransition(stepsForIndicator[idx - 1]);
-            }}
-          >
-            <Ionicons name="chevron-back" size={24} color={Colors.dark.text} />
-          </Pressable>
-        )}
-        {renderStepIndicator()}
-        <RNAnimated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
-          {renderStep()}
-        </RNAnimated.View>
-      </View>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.container}
+        >
+          <View style={[styles.inner, { paddingTop: topInset + 16, paddingBottom: bottomInset + 16 }]}>
+            {step !== "ftux" && (
+              <Pressable
+                style={styles.backButton}
+                onPress={() => {
+                  const idx = stepsForIndicator.indexOf(step);
+                  if (idx > 0) animateTransition(stepsForIndicator[idx - 1]);
+                }}
+              >
+                <Ionicons name="chevron-back" size={24} color={Colors.dark.text} />
+              </Pressable>
+            )}
+            {renderStepIndicator()}
+            <RNAnimated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
+              {renderStep()}
+            </RNAnimated.View>
+          </View>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
     </LinearGradient>
   );
 }

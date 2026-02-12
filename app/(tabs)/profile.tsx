@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,9 @@ import {
   deleteProfile,
   saveProfile,
 } from "@/lib/storage";
+import { calculatePlanetPositions, calculateGST } from "@/lib/astronomy";
+import { computeNatalChart, ELEMENT_COLORS, NatalChart } from "@/lib/natal";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -212,10 +215,12 @@ export default function ProfileScreen() {
     );
   }
 
+  const { user: authUser, isLoggedIn, logout } = useAuth();
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
-        <Text style={styles.screenTitle}>Charts</Text>
+        <Text style={styles.screenTitle}>Profile</Text>
       </View>
 
       <ScrollView
@@ -223,6 +228,72 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.contentInner}
         showsVerticalScrollIndicator={false}
       >
+        {/* Account Card */}
+        {isLoggedIn ? (
+          <View style={styles.accountCard}>
+            <View style={styles.accountInfo}>
+              <View style={styles.avatarCircle}>
+                <Ionicons name="person" size={24} color={Colors.dark.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.accountName}>{authUser?.displayName}</Text>
+                <Text style={styles.accountUsername}>@{authUser?.username}</Text>
+              </View>
+            </View>
+            <View style={styles.accountActions}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.accountBtn,
+                  pressed && { opacity: 0.7 },
+                ]}
+                onPress={() => router.push("/friends" as any)}
+              >
+                <Ionicons name="people-outline" size={18} color={Colors.dark.primary} />
+                <Text style={styles.accountBtnText}>Friends</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.accountBtn,
+                  styles.accountBtnDanger,
+                  pressed && { opacity: 0.7 },
+                ]}
+                onPress={() => {
+                  Alert.alert("Sign Out", "Are you sure?", [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Sign Out",
+                      style: "destructive",
+                      onPress: logout,
+                    },
+                  ]);
+                }}
+              >
+                <Ionicons name="log-out-outline" size={18} color={Colors.dark.danger} />
+                <Text style={[styles.accountBtnText, { color: Colors.dark.danger }]}>Sign Out</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [
+              styles.signInCard,
+              pressed && { opacity: 0.85 },
+            ]}
+            onPress={() => router.push("/auth")}
+          >
+            <Ionicons name="person-circle-outline" size={32} color={Colors.dark.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.signInTitle}>Sign in to Stellaris</Text>
+              <Text style={styles.signInDesc}>
+                Sync charts across devices, add friends, and share maps.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={Colors.dark.textMuted} />
+          </Pressable>
+        )}
+
+        {/* Section title */}
+        <Text style={styles.sectionTitle}>Birth Charts</Text>
         {profiles.map((profile) => {
           const isActive = profile.id === activeId;
           return (
@@ -302,30 +373,44 @@ export default function ProfileScreen() {
           <Text style={styles.addButtonText}>Add New Chart</Text>
         </Pressable>
 
-        <View style={styles.aboutSection}>
-          <Text style={styles.aboutTitle}>About Astrocartography</Text>
-          <Text style={styles.aboutText}>
-            Astrocartography maps your birth chart onto the globe, showing where
-            different planetary energies are strongest for you. Each planet
-            creates four types of lines:
-          </Text>
-          <View style={styles.aboutList}>
-            {[
-              { title: "Midheaven (MC)", desc: "Where the planet culminates - affects your career and public image", color: Colors.dark.primary },
-              { title: "Imum Coeli (IC)", desc: "Where the planet is at its lowest - affects home and private life", color: Colors.dark.secondary },
-              { title: "Ascendant (ASC)", desc: "Where the planet rises - affects your personality and how others see you", color: "#43D9AD" },
-              { title: "Descendant (DSC)", desc: "Where the planet sets - affects partnerships and relationships", color: "#F472B6" },
-            ].map((item) => (
-              <View key={item.title} style={styles.aboutItem}>
-                <View style={[styles.aboutDot, { backgroundColor: item.color }]} />
-                <View style={styles.aboutItemContent}>
-                  <Text style={styles.aboutItemTitle}>{item.title}</Text>
-                  <Text style={styles.aboutItemDesc}>{item.desc}</Text>
-                </View>
+        {/* ── Natal Chart Card ── */}
+        {profiles.length > 0 && activeId && (() => {
+          const active = profiles.find(p => p.id === activeId);
+          if (!active) return null;
+          const [year, month, day] = active.date.split("-").map(Number);
+          const [hour, minute] = active.time.split(":").map(Number);
+          const positions = calculatePlanetPositions(year, month, day, hour, minute, active.longitude);
+          const gst = calculateGST(year, month, day, hour, minute, active.longitude);
+          const natal = computeNatalChart(positions, gst, active.latitude, active.longitude);
+          const bigThree = [
+            { label: "Sun", icon: "sunny" as const, data: natal.sun },
+            { label: "Moon", icon: "moon" as const, data: natal.moon },
+            { label: "arrow-up-circle" as any, icon: "arrow-up-circle" as const, data: natal.rising },
+          ];
+          return (
+            <View style={styles.natalCard}>
+              <Text style={styles.natalTitle}>Your Big Three</Text>
+              <View style={styles.natalRow}>
+                {[
+                  { label: "Sun", icon: "sunny" as const, data: natal.sun },
+                  { label: "Moon", icon: "moon" as const, data: natal.moon },
+                  { label: "Rising", icon: "arrow-up-circle" as const, data: natal.rising },
+                ].map(({ label, icon, data }) => (
+                  <View key={label} style={styles.natalItem}>
+                    <View style={[styles.natalIconWrap, { backgroundColor: ELEMENT_COLORS[data.element] + "18" }]}>
+                      <Ionicons name={icon} size={22} color={ELEMENT_COLORS[data.element]} />
+                    </View>
+                    <Text style={styles.natalLabel}>{label}</Text>
+                    <Text style={styles.natalSign}>{data.symbol} {data.sign}</Text>
+                    <Text style={[styles.natalElement, { color: ELEMENT_COLORS[data.element] }]}>
+                      {data.element} · {data.degree}°
+                    </Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-        </View>
+            </View>
+          );
+        })()}
         <View style={{ height: 120 }} />
       </ScrollView>
 
@@ -660,7 +745,7 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_500Medium",
     color: Colors.dark.primary,
   },
-  aboutSection: {
+  natalCard: {
     marginTop: 24,
     backgroundColor: Colors.dark.card,
     borderRadius: 18,
@@ -668,39 +753,45 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
   },
-  aboutTitle: {
-    fontSize: 20,
+  natalTitle: {
+    fontSize: 18,
     fontFamily: "Outfit_700Bold",
     color: Colors.dark.text,
-    marginBottom: 10,
-  },
-  aboutText: {
-    fontSize: 14,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textSecondary,
-    lineHeight: 21,
     marginBottom: 16,
+    textAlign: "center",
   },
-  aboutList: { gap: 14 },
-  aboutItem: { flexDirection: "row", gap: 12 },
-  aboutDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 6,
+  natalRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
   },
-  aboutItemContent: { flex: 1 },
-  aboutItemTitle: {
-    fontSize: 14,
-    fontFamily: "Outfit_600SemiBold",
+  natalItem: {
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
+  },
+  natalIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  natalLabel: {
+    fontSize: 12,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.textMuted,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+  },
+  natalSign: {
+    fontSize: 16,
+    fontFamily: "Outfit_700Bold",
     color: Colors.dark.text,
-    marginBottom: 2,
   },
-  aboutItemDesc: {
-    fontSize: 13,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textSecondary,
-    lineHeight: 19,
+  natalElement: {
+    fontSize: 11,
+    fontFamily: "Outfit_500Medium",
   },
   modalContainer: {
     flex: 1,
@@ -846,4 +937,89 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
   },
   resultTextSelected: { color: Colors.dark.text },
+
+  // ── Account ──
+  accountCard: {
+    backgroundColor: Colors.dark.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+    gap: 14,
+  },
+  accountInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.dark.primary + "18",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  accountName: {
+    fontSize: 17,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.text,
+  },
+  accountUsername: {
+    fontSize: 14,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textMuted,
+  },
+  accountActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  accountBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.dark.primary + "12",
+  },
+  accountBtnDanger: {
+    backgroundColor: Colors.dark.danger + "12",
+  },
+  accountBtnText: {
+    fontSize: 14,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.primary,
+  },
+  signInCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: Colors.dark.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.dark.primary + "30",
+  },
+  signInTitle: {
+    fontSize: 16,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.text,
+    marginBottom: 3,
+  },
+  signInDesc: {
+    fontSize: 13,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textSecondary,
+    lineHeight: 18,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.text,
+    marginBottom: 12,
+  },
 });
