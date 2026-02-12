@@ -444,9 +444,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ════════════════════════════════════════════════════════════════
 
+  // ════════════════════════════════════════════════════════════════
+  //  DEBUG / SEED ROUTES (Temporary)
+  // ════════════════════════════════════════════════════════════════
+
+  app.get("/api/debug/seed", async (req, res) => {
+    if (req.query.key !== "stellaris_seed") {
+      return res.status(401).json({ error: "Access denied" });
+    }
+
+    try {
+      const { db } = await import("./db");
+      const { users, birthProfiles } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+
+      const testData = [
+        {
+          username: "kelsey_wood",
+          displayName: "Kelsey Wood",
+          email: "kelsey@test.stellaris.dev",
+          birth: {
+            name: "Kelsey",
+            birthDate: "1991-06-22",
+            birthTime: "02:00",
+            latitude: 49.2827,
+            longitude: -123.1207,
+            locationName: "Vancouver, BC, Canada",
+          },
+        },
+        {
+          username: "emma_star",
+          displayName: "Emma",
+          email: "emma@test.stellaris.dev",
+          birth: {
+            name: "Emma",
+            birthDate: "2004-03-19",
+            birthTime: "22:16",
+            latitude: 30.4515,
+            longitude: -91.1871,
+            locationName: "Baton Rouge, LA, USA",
+          },
+        },
+        {
+          username: "tina_cosmic",
+          displayName: "Tina",
+          email: "tina@test.stellaris.dev",
+          birth: {
+            name: "Tina",
+            birthDate: "1988-07-27",
+            birthTime: "19:27",
+            latitude: 40.2171,
+            longitude: -74.7429,
+            locationName: "Trenton, NJ, USA",
+          },
+        },
+        {
+          username: "joanna_voyager",
+          displayName: "Joanna",
+          email: "joanna@test.stellaris.dev",
+          birth: {
+            name: "Joanna",
+            birthDate: "1989-09-07",
+            birthTime: "20:57",
+            latitude: 35.6762,
+            longitude: 139.6503,
+            locationName: "Tokyo, Japan",
+          },
+        },
+      ];
+
+      for (const u of testData) {
+        // Delete existing user if present
+        await db.delete(users).where(eq(users.username, u.username));
+
+        const [user] = await db
+          .insert(users)
+          .values({
+            username: u.username,
+            displayName: u.displayName,
+            email: u.email,
+            authProvider: "email",
+          })
+          .returning();
+
+        await db.insert(birthProfiles).values({
+          userId: user.id,
+          ...u.birth,
+          isActive: true,
+        });
+      }
+
+      res.json({ success: true, message: "Database seeded successfully with 4 friends." });
+    } catch (err: any) {
+      console.error("Seed error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
+
 
 // ── Helpers ────────────────────────────────────────────────────────
 
