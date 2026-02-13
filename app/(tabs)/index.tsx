@@ -9,14 +9,16 @@ import {
   ActivityIndicator,
   PanResponder,
   Animated,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { BirthData, PlanetName, AstroLine } from "@/lib/types";
 import { getActiveProfile } from "@/lib/storage";
+import { authFetch } from "@/lib/auth";
 import {
   calculatePlanetPositions,
   calculateGST,
@@ -32,6 +34,8 @@ import {
 } from "@/lib/lineClassification";
 import AstroMap from "@/components/AstroMap";
 import Svg, { Line } from "react-native-svg";
+import * as Location from "expo-location";
+import { LiveInsightsCard } from "@/components/LiveInsightsCard";
 
 const ALL_PLANETS: PlanetName[] = [
   "sun", "moon", "mercury", "venus", "mars",
@@ -47,11 +51,48 @@ const KEYWORD_TAGS = [
 
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams();
   const [profile, setProfile] = useState<BirthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [enabledPlanets, setEnabledPlanets] = useState<Set<PlanetName>>(
     new Set(ALL_PLANETS)
   );
+
+  // Check for Bond params
+  const { mode, bondType, partnerName } = params;
+  const friendIdParam = Array.isArray(params.viewFriendId) ? params.viewFriendId[0] : params.viewFriendId;
+  const friendNameParam = Array.isArray(params.viewFriendName) ? params.viewFriendName[0] : params.viewFriendName;
+  const isFriendView = typeof friendIdParam === "string" && friendIdParam.length > 0;
+
+  // ── Live Location Insights State ──
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [showInsights, setShowInsights] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+
+  useEffect(() => {
+    if (mode === "bond" && partnerName) {
+      // Temporary acknowledgment until dual-rendering is built
+      setTimeout(() => {
+        Alert.alert(
+          "Bond Initialized",
+          `Viewing ${bondType === "synastry" ? "Synastry" : "Composite"} Chart with ${partnerName}.\n\n(Dual-chart rendering coming in next update!)`
+        );
+      }, 500);
+    }
+  }, [mode, bondType, partnerName]);
+
+  useEffect(() => {
+    if (mode === "bond" && partnerName) {
+      // Temporary acknowledgment until dual-rendering is built
+      setTimeout(() => {
+        Alert.alert(
+          "Bond Initialized",
+          `Viewing ${bondType === "synastry" ? "Synastry" : "Composite"} Chart with ${partnerName}.\n\n(Dual-chart rendering coming in next update!)`
+        );
+      }, 500);
+    }
+  }, [mode, bondType, partnerName]);
+
   const [selectedLine, setSelectedLine] = useState<AstroLine | null>(null);
   const [showLegend, setShowLegend] = useState(false);
   const [simplifiedView, setSimplifiedView] = useState(false);
@@ -97,11 +138,32 @@ export default function MapScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-    }, [])
+    }, [friendIdParam, friendNameParam])
   );
 
   const loadProfile = async () => {
     setLoading(true);
+    if (friendIdParam) {
+      const res = await authFetch<{ profile: any }>("GET", `/api/friends/${friendIdParam}/profile`);
+      if (res.data?.profile) {
+        const fp = res.data.profile;
+        setProfile({
+          id: `friend_${fp.id}`,
+          name: friendNameParam || fp.name || "Friend",
+          date: fp.birthDate,
+          time: fp.birthTime,
+          latitude: fp.latitude,
+          longitude: fp.longitude,
+          locationName: fp.locationName,
+          createdAt: Date.now(),
+        });
+      } else {
+        Alert.alert("Friend View Unavailable", res.error || "Could not load your friend's chart.");
+        router.replace("/(tabs)");
+      }
+      setLoading(false);
+      return;
+    }
     const p = await getActiveProfile();
     setProfile(p);
     setLoading(false);
@@ -149,6 +211,18 @@ export default function MapScreen() {
       return true;
     });
   }, [astroLines, enabledPlanets, enabledSentiments, enabledKeywords]);
+
+  // Handle Deep Linking from Learn Tab
+  useEffect(() => {
+    if (params.planet && params.lineType && visibleLines.length > 0) {
+      const target = visibleLines.find(
+        (l) => l.planet === params.planet && l.lineType === params.lineType
+      );
+      if (target) {
+        setSelectedLine(target);
+      }
+    }
+  }, [params.planet, params.lineType, visibleLines]);
 
   // Debounce lines sent to the map to prevent native crash from rapid Polyline updates
   const [debouncedLines, setDebouncedLines] = useState<AstroLine[]>([]);
@@ -215,6 +289,30 @@ export default function MapScreen() {
     setEnabledKeywords(new Set());
   };
 
+  const handleLocateMe = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "We need access to your location to show live cosmic insights.");
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+      setShowInsights(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      Alert.alert("Error", "Could not fetch location");
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
   const getLineColor = (planet: PlanetName): string => {
     return Colors.planets[planet] || "#FFFFFF";
   };
@@ -245,6 +343,20 @@ export default function MapScreen() {
       />
 
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
+        {isFriendView && (
+          <View style={styles.friendViewBanner}>
+            <Text style={styles.friendViewText}>
+              Viewing {friendNameParam || profile.name}'s chart
+            </Text>
+            <Pressable
+              style={({ pressed }) => [styles.friendViewClose, pressed && { opacity: 0.7 }]}
+              onPress={() => router.replace("/(tabs)")}
+            >
+              <Ionicons name="close" size={16} color={Colors.dark.primary} />
+              <Text style={styles.friendViewCloseText}>Back to Mine</Text>
+            </Pressable>
+          </View>
+        )}
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.headerTitle}>{profile.name}</Text>
@@ -270,6 +382,34 @@ export default function MapScreen() {
                 color={simplifiedView ? Colors.dark.primary : Colors.dark.textSecondary}
               />
             </Pressable>
+
+            {/* GPS Button */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.helpButton,
+                pressed && { opacity: 0.7 },
+                isLocating && styles.helpButtonActive,
+                showInsights && styles.helpButtonActive,
+              ]}
+              onPress={() => {
+                if (showInsights) {
+                  setShowInsights(false);
+                } else {
+                  handleLocateMe();
+                }
+              }}
+            >
+              {isLocating ? (
+                <ActivityIndicator size="small" color={Colors.dark.primary} />
+              ) : (
+                <Ionicons
+                  name={showInsights ? "navigate" : "navigate-outline"}
+                  size={20}
+                  color={(showInsights || isLocating) ? Colors.dark.primary : Colors.dark.textSecondary}
+                />
+              )}
+            </Pressable>
+
             <Pressable
               style={({ pressed }) => [
                 styles.helpButton,
@@ -544,6 +684,15 @@ export default function MapScreen() {
           </Animated.View>
         </View>
       )}
+
+      {/* Live Insights Overlay */}
+      {showInsights && (
+        <LiveInsightsCard
+          location={userLocation}
+          birthProfile={profile}
+          onClose={() => setShowInsights(false)}
+        />
+      )}
     </View>
   );
 }
@@ -558,6 +707,39 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 20,
     paddingBottom: 12,
+  },
+  friendViewBanner: {
+    marginBottom: 10,
+    backgroundColor: Colors.dark.primary + "14",
+    borderWidth: 1,
+    borderColor: Colors.dark.primary + "40",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  friendViewText: {
+    flex: 1,
+    color: Colors.dark.primary,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+  },
+  friendViewClose: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.dark.primary + "18",
+  },
+  friendViewCloseText: {
+    color: Colors.dark.primary,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
   },
   headerContent: {
     backgroundColor: Colors.dark.overlay,

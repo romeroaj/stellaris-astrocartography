@@ -12,12 +12,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { BirthData, PlanetName, LineType } from "@/lib/types";
 import { getActiveProfile } from "@/lib/storage";
+import { authFetch } from "@/lib/auth";
 import {
   calculatePlanetPositions,
   calculateGST,
@@ -43,6 +44,7 @@ const ALL_PLANETS: PlanetName[] = [
 
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams();
   const [profile, setProfile] = useState<BirthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,15 +58,39 @@ export default function InsightsScreen() {
   const [keywordFilter, setKeywordFilter] = useState("");
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
+  const friendIdParam = Array.isArray(params.viewFriendId) ? params.viewFriendId[0] : params.viewFriendId;
+  const friendNameParam = Array.isArray(params.viewFriendName) ? params.viewFriendName[0] : params.viewFriendName;
+  const isFriendView = typeof friendIdParam === "string" && friendIdParam.length > 0;
 
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-    }, [])
+    }, [friendIdParam, friendNameParam])
   );
 
   const loadProfile = async () => {
     setLoading(true);
+    if (friendIdParam) {
+      const res = await authFetch<{ profile: any }>("GET", `/api/friends/${friendIdParam}/profile`);
+      if (res.data?.profile) {
+        const fp = res.data.profile;
+        setProfile({
+          id: `friend_${fp.id}`,
+          name: friendNameParam || fp.name || "Friend",
+          date: fp.birthDate,
+          time: fp.birthTime,
+          latitude: fp.latitude,
+          longitude: fp.longitude,
+          locationName: fp.locationName,
+          createdAt: Date.now(),
+        });
+      } else {
+        Alert.alert("Friend View Unavailable", res.error || "Could not load your friend's insights.");
+        router.replace("/(tabs)/insights");
+      }
+      setLoading(false);
+      return;
+    }
     const p = await getActiveProfile();
     setProfile(p);
     setLoading(false);
@@ -232,6 +258,20 @@ export default function InsightsScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
+        {isFriendView && (
+          <View style={styles.friendViewBanner}>
+            <Text style={styles.friendViewText}>
+              Viewing {friendNameParam || profile.name}'s insights
+            </Text>
+            <Pressable
+              style={({ pressed }) => [styles.friendViewClose, pressed && { opacity: 0.7 }]}
+              onPress={() => router.replace("/(tabs)/insights")}
+            >
+              <Ionicons name="close" size={16} color={Colors.dark.primary} />
+              <Text style={styles.friendViewCloseText}>Back to Mine</Text>
+            </Pressable>
+          </View>
+        )}
         <Text style={styles.screenTitle}>Insights</Text>
         <View style={styles.tabRow}>
           <Pressable
@@ -552,6 +592,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     backgroundColor: Colors.dark.background,
+  },
+  friendViewBanner: {
+    marginBottom: 10,
+    backgroundColor: Colors.dark.primary + "14",
+    borderWidth: 1,
+    borderColor: Colors.dark.primary + "40",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  friendViewText: {
+    flex: 1,
+    color: Colors.dark.primary,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 13,
+  },
+  friendViewClose: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.dark.primary + "18",
+  },
+  friendViewCloseText: {
+    color: Colors.dark.primary,
+    fontFamily: "Outfit_600SemiBold",
+    fontSize: 12,
   },
   screenTitle: {
     fontSize: 32,

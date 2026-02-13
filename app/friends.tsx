@@ -34,11 +34,18 @@ interface Friend {
     displayName: string;
     avatarUrl: string | null;
     friendshipId: string;
+    activeProfile: {
+        id: string;
+        name: string;
+        birthDate: string;
+        birthTime: string;
+        locationName: string;
+    } | null;
 }
 
 interface PendingRequest {
     id: string;
-    requester: UserResult;
+    user: UserResult;
     createdAt: string;
 }
 
@@ -65,8 +72,21 @@ export default function FriendsScreen() {
                 authFetch<{ friends: Friend[] }>("GET", "/api/friends"),
                 authFetch<{ requests: PendingRequest[] }>("GET", "/api/friends/pending"),
             ]);
-            setFriends(friendsRes.data?.friends || []);
-            setPending(pendingRes.data?.requests || []);
+            const normalizedFriends = (friendsRes.data?.friends || []).map((f: any) => ({
+                id: f.user?.id ?? f.id,
+                username: f.user?.username ?? f.username ?? "",
+                displayName: f.user?.displayName ?? f.displayName ?? "Unknown",
+                avatarUrl: f.user?.avatarUrl ?? f.avatarUrl ?? null,
+                friendshipId: f.friendshipId ?? f.id,
+                activeProfile: f.activeProfile ?? null,
+            }));
+            const normalizedPending = (pendingRes.data?.requests || []).map((p: any) => ({
+                id: p.friendshipId ?? p.id,
+                user: p.user ?? p.requester,
+                createdAt: p.sentAt ?? p.createdAt ?? new Date().toISOString(),
+            }));
+            setFriends(normalizedFriends);
+            setPending(normalizedPending);
         } catch {
             // silent fail
         } finally {
@@ -144,8 +164,9 @@ export default function FriendsScreen() {
         setActionLoading(friendshipId);
         Haptics.impactAsync(accept ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
         try {
-            const res = await authFetch("POST", `/api/friends/${friendshipId}/respond`, {
-                accept,
+            const res = await authFetch("POST", "/api/friends/respond", {
+                friendshipId,
+                action: accept ? "accept" : "block",
             });
             if (res.error) {
                 Alert.alert("Error", res.error);
@@ -159,16 +180,16 @@ export default function FriendsScreen() {
         }
     };
 
-    const removeFriend = async (friendshipId: string) => {
+    const removeFriend = async (friendId: string) => {
         Alert.alert("Remove Friend", "Are you sure?", [
             { text: "Cancel", style: "cancel" },
             {
                 text: "Remove",
                 style: "destructive",
                 onPress: async () => {
-                    setActionLoading(friendshipId);
+                    setActionLoading(friendId);
                     try {
-                        await authFetch("DELETE", `/api/friends/${friendshipId}`);
+                        await authFetch("DELETE", `/api/friends/${friendId}`);
                         loadFriends();
                     } catch {
                         Alert.alert("Error", "Failed to remove friend.");
@@ -178,6 +199,26 @@ export default function FriendsScreen() {
                 },
             },
         ]);
+    };
+
+    const viewFriendChart = (friend: Friend) => {
+        router.push({
+            pathname: "/",
+            params: {
+                viewFriendId: friend.id,
+                viewFriendName: friend.displayName,
+            },
+        });
+    };
+
+    const viewFriendInsights = (friend: Friend) => {
+        router.push({
+            pathname: "/(tabs)/insights",
+            params: {
+                viewFriendId: friend.id,
+                viewFriendName: friend.displayName,
+            },
+        });
     };
 
     if (!isLoggedIn) {
@@ -250,13 +291,34 @@ export default function FriendsScreen() {
                 <View style={{ flex: 1 }}>
                     <Text style={styles.userName}>{f.displayName}</Text>
                     <Text style={styles.userHandle}>@{f.username}</Text>
+                    {f.activeProfile ? (
+                        <Text style={styles.userMeta}>
+                            {f.activeProfile.birthDate} • {f.activeProfile.locationName}
+                        </Text>
+                    ) : (
+                        <Text style={styles.userMeta}>No birth profile yet</Text>
+                    )}
+                </View>
+                <View style={styles.friendActions}>
+                    <Pressable
+                        style={({ pressed }) => [styles.actionBtnInfo, pressed && { opacity: 0.7 }]}
+                        onPress={() => viewFriendChart(f)}
+                    >
+                        <Ionicons name="map-outline" size={18} color={Colors.dark.primary} />
+                    </Pressable>
+                    <Pressable
+                        style={({ pressed }) => [styles.actionBtnInfo, pressed && { opacity: 0.7 }]}
+                        onPress={() => viewFriendInsights(f)}
+                    >
+                        <Ionicons name="sparkles-outline" size={18} color={Colors.dark.primary} />
+                    </Pressable>
                 </View>
                 <Pressable
                     style={({ pressed }) => [styles.actionBtnDanger, pressed && { opacity: 0.7 }]}
-                    onPress={() => removeFriend(f.friendshipId)}
-                    disabled={actionLoading === f.friendshipId}
+                    onPress={() => removeFriend(f.id)}
+                    disabled={actionLoading === f.id}
                 >
-                    {actionLoading === f.friendshipId ? (
+                    {actionLoading === f.id ? (
                         <ActivityIndicator size="small" color={Colors.dark.danger} />
                     ) : (
                         <Ionicons name="person-remove-outline" size={18} color={Colors.dark.danger} />
@@ -285,8 +347,8 @@ export default function FriendsScreen() {
                     <Ionicons name="person" size={20} color={Colors.dark.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                    <Text style={styles.userName}>{p.requester.displayName}</Text>
-                    <Text style={styles.userHandle}>@{p.requester.username}</Text>
+                    <Text style={styles.userName}>{p.user.displayName}</Text>
+                    <Text style={styles.userHandle}>@{p.user.username}</Text>
                 </View>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                     <Pressable
@@ -471,6 +533,24 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontFamily: "Outfit_400Regular",
         color: Colors.dark.textMuted,
+    },
+    userMeta: {
+        marginTop: 2,
+        fontSize: 12,
+        fontFamily: "Outfit_400Regular",
+        color: Colors.dark.textSecondary,
+    },
+    friendActions: {
+        flexDirection: "row",
+        gap: 8,
+    },
+    actionBtnInfo: {
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        backgroundColor: Colors.dark.primary + "12",
+        alignItems: "center",
+        justifyContent: "center",
     },
     addBtn: {
         width: 40,

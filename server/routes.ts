@@ -466,13 +466,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/friends", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
       const friends = await storage.getFriends(req.userId!);
-      res.json({
-        friends: friends.map((f) => ({
-          friendshipId: f.id,
-          user: sanitizeUser(f.friend),
-          since: f.updatedAt,
-        })),
-      });
+      const enriched = await Promise.all(
+        friends.map(async (f) => {
+          const profiles = await storage.getProfilesByUserId(f.friend.id);
+          const activeProfile = profiles.find((p) => p.isActive) || profiles[0] || null;
+          return {
+            friendshipId: f.id,
+            user: sanitizeUser(f.friend),
+            since: f.updatedAt,
+            activeProfile: activeProfile
+              ? {
+                id: activeProfile.id,
+                name: activeProfile.name,
+                birthDate: activeProfile.birthDate,
+                birthTime: activeProfile.birthTime,
+                locationName: activeProfile.locationName,
+              }
+              : null,
+          };
+        })
+      );
+      res.json({ friends: enriched });
     } catch (err: any) {
       res.status(500).json({ error: "Internal server error" });
     }
