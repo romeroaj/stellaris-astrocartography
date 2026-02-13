@@ -41,14 +41,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Prefer real DB user so /api/friends returns Railway data
-      const dbUser = await storage.getUserByUsername("adotjdot");
+      let dbUser: User | undefined;
+      try {
+        dbUser = await storage.getUserByUsername("adotjdot");
+      } catch (e) {
+        console.error("Dev-login DB lookup failed, using fallback user:", e);
+      }
       if (dbUser) {
         const token = await createToken(dbUser.id, dbUser.username, dbUser.email || undefined);
         res.json({ token, user: sanitizeUser(dbUser) });
         return;
       }
 
-      // Fallback: hardcoded dev user when DB has no adotjdot yet
+      // Fallback: hardcoded dev user when DB has no adotjdot or DB error
       const devUser = {
         id: "dev-user-adotjdot-001",
         username: "adotjdot",
