@@ -21,6 +21,24 @@ function slugify(input: string): string {
     .slice(0, 30);
 }
 
+const MOCK_USERS_DATA: Record<string, { username: string; displayName: string; email: string; avatarUrl: string }> = {
+  "mock-user-kelsey": {
+    username: "kelsey",
+    displayName: "Kelsey",
+    email: "kelsey@example.com",
+    avatarUrl: "https://i.pravatar.cc/150?u=kelsey",
+  },
+  "mock-user-joanna": {
+    username: "joanna",
+    displayName: "Joanna",
+    email: "joanna@example.com",
+    avatarUrl: "https://i.pravatar.cc/150?u=joanna",
+  },
+};
+
+// Seeded test users (with birth profiles) — auto-accept friend requests so you can test Bonds
+const TEST_USERNAMES = new Set(["kelsey_wood", "emma_star", "tina_cosmic", "joanna_voyager"]);
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // ════════════════════════════════════════════════════════════════
   //  AUTH ROUTES
@@ -33,7 +51,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.post("/api/auth/dev-login", async (req, res) => {
     try {
-      const { username, pin } = req.body;
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
+      const pin = typeof body.pin === "string" ? body.pin : "";
 
       // Hardcoded dev credentials
       if (username !== "adotjdot" || pin !== "0215") {
@@ -49,8 +69,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (dbUser) {
         const token = await createToken(dbUser.id, dbUser.username, dbUser.email || undefined);
-        res.json({ token, user: sanitizeUser(dbUser) });
-        return;
+        const userPayload = sanitizeUser(dbUser);
+        return res.json({ token, user: { ...userPayload, createdAt: userPayload.createdAt instanceof Date ? userPayload.createdAt.toISOString() : userPayload.createdAt } });
       }
 
       // Fallback: hardcoded dev user when DB has no adotjdot or DB error
@@ -64,9 +84,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date().toISOString(),
       };
       const token = await createToken(devUser.id, devUser.username, devUser.email);
-      res.json({ token, user: devUser });
+      return res.json({ token, user: devUser });
     } catch (err: any) {
-      console.error("Dev login error:", err);
+      console.error("Dev login error (full):", err?.message ?? err, err?.stack);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -310,55 +330,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users/search", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
       const q = (req.query.q as string || "").trim().toLowerCase();
-      if (q.length < 2) {
-        return res.json({ users: [] });
+
+      // Empty or short query: return all DB users (so "Search" shows everyone)
+      const limit = 100;
+      try {
+        const results = await storage.searchUsers(q || "", limit);
+        const dbUsers = results
+          .filter((u) => u.id !== req.userId)
+          .map(sanitizeUser);
+        if (dbUsers.length > 0 || q.length >= 2) {
+          return res.json({ users: dbUsers });
+        }
+      } catch (dbErr) {
+        console.warn("DB search failed, falling back to mock users:", dbErr);
       }
 
-      // Mock users for dev/testing
-      const mockUsers = [
-        {
-          id: "mock-user-kelsey",
-          username: "kelsey",
-          displayName: "Kelsey",
-          email: "kelsey@example.com",
-          avatarUrl: "https://i.pravatar.cc/150?u=kelsey",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: "mock-user-joanna",
-          username: "joanna",
-          displayName: "Joanna",
-          email: "joanna@example.com",
-          avatarUrl: "https://i.pravatar.cc/150?u=joanna",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      // Filter mock users
-      const matches = mockUsers.filter(
-        (u) =>
-          u.username.toLowerCase().includes(q) ||
-          u.displayName.toLowerCase().includes(q)
-      );
-
-      if (matches.length > 0) {
+      // Fallback: mock users when DB has no match (and we had a search term)
+      if (q.length >= 2) {
+        const now = new Date().toISOString();
+        const mockUsers = Object.entries(MOCK_USERS_DATA).map(([id, d]) => ({
+          id,
+          ...d,
+          createdAt: now,
+          updatedAt: now,
+        }));
+        const matches = mockUsers.filter(
+          (u) =>
+            u.username.toLowerCase().includes(q) ||
+            u.displayName.toLowerCase().includes(q)
+        );
         return res.json({ users: matches });
       }
 
-      // Try actual DB search (will fail if no DB, so catch and return empty)
-      try {
-        const results = await storage.searchUsers(q);
-        res.json({
-          users: results
-            .filter((u) => u.id !== req.userId)
-            .map(sanitizeUser),
-        });
-      } catch (dbErr) {
-        console.warn("DB search failed, returning empty results:", dbErr);
-        res.json({ users: [] });
-      }
+      return res.json({ users: [] });
     } catch (err: any) {
       console.error("User search error:", err);
       res.status(500).json({ error: "Internal server error" });
@@ -471,9 +475,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/friends/request", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
-      const { userId: addresseeId } = req.body;
+      const addresseeId = req.body.addresseeId ?? req.body.userId;
       if (!addresseeId) {
-        return res.status(400).json({ error: "userId is required" });
+        return res.status(400).json({ error: "addresseeId or userId is required" });
       }
       if (addresseeId === req.userId) {
         return res.status(400).json({ error: "Cannot friend yourself" });
@@ -485,7 +489,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(409).json({ error: "Friendship already exists", status: existing.status });
       }
 
+      // Mock users: ensure they exist in DB (for FK), then auto-accept
+      const mockData = MOCK_USERS_DATA[addresseeId];
+      if (mockData) {
+        await storage.ensureMockUser(addresseeId, mockData);
+      }
+
       const friendship = await storage.sendFriendRequest(req.userId!, addresseeId);
+
+      // Auto-accept for mock users or seeded test users (so you can test Bonds without them "accepting")
+      let shouldAutoAccept = !!mockData;
+      if (!shouldAutoAccept) {
+        const addressee = await storage.getUser(addresseeId);
+        if (addressee && TEST_USERNAMES.has(addressee.username)) {
+          shouldAutoAccept = true;
+        }
+      }
+      if (shouldAutoAccept) {
+        const updated = await storage.respondToFriendRequest(friendship.id, "accepted");
+        return res.json({ friendship: updated ?? friendship });
+      }
+
       res.json({ friendship });
     } catch (err: any) {
       res.status(500).json({ error: "Internal server error" });

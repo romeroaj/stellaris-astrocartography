@@ -79,12 +79,12 @@ export default function FriendsScreen() {
     }, [isLoggedIn, loadFriends]);
 
     const handleSearch = async () => {
-        if (!searchQuery.trim() || searchQuery.length < 2) return;
         setSearching(true);
         try {
+            const q = searchQuery.trim();
             const res = await authFetch<{ users: UserResult[] }>(
                 "GET",
-                `/api/users/search?q=${encodeURIComponent(searchQuery.trim())}`
+                `/api/users/search?q=${encodeURIComponent(q)}`
             );
             setSearchResults(res.data?.users || []);
         } catch {
@@ -331,8 +331,10 @@ export default function FriendsScreen() {
                     </Pressable>
                 </View>
             ))}
-            {searchResults.length === 0 && searchQuery.length > 0 && !searching && (
-                <Text style={styles.noResults}>No users found matching "{searchQuery}"</Text>
+            {searchResults.length === 0 && !searching && (
+                <Text style={styles.noResults}>
+                    {searchQuery.trim() ? `No users found matching "${searchQuery}"` : "Hit Search to see all users in the database."}
+                </Text>
             )}
         </View>
     );

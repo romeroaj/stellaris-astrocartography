@@ -43,6 +43,7 @@ export interface IStorage {
   respondToFriendRequest(friendshipId: string, status: "accepted" | "blocked"): Promise<Friendship | undefined>;
   removeFriend(userId: string, friendId: string): Promise<void>;
   getFriendship(userId: string, friendId: string): Promise<Friendship | undefined>;
+  ensureMockUser(id: string, data: { username: string; displayName: string; email?: string; avatarUrl?: string | null }): Promise<User>;
 }
 
 // ── Database Storage ───────────────────────────────────────────────
@@ -262,6 +263,27 @@ export class DatabaseStorage implements IStorage {
       )
       .limit(1);
     return row;
+  }
+
+  async ensureMockUser(
+    id: string,
+    data: { username: string; displayName: string; email?: string; avatarUrl?: string | null }
+  ): Promise<User> {
+    const existing = await this.getUser(id);
+    if (existing) return existing;
+    const [user] = await db
+      .insert(users)
+      .values({
+        id,
+        username: data.username.toLowerCase(),
+        displayName: data.displayName,
+        email: data.email ?? null,
+        avatarUrl: data.avatarUrl ?? null,
+        authProvider: "email",
+        authProviderId: null,
+      })
+      .returning();
+    return user;
   }
 }
 
