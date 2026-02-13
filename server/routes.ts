@@ -73,7 +73,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ token, user: { ...userPayload, createdAt: userPayload.createdAt instanceof Date ? userPayload.createdAt.toISOString() : userPayload.createdAt } });
       }
 
-      // Fallback: hardcoded dev user when DB has no adotjdot or DB error
+      // Create adotjdot in DB so friend requests work (FK requires requester to exist in users)
+      try {
+        const newUser = await storage.createUser({
+          username: "adotjdot",
+          displayName: "adotjdot",
+          email: "adotjdott@gmail.com",
+          authProvider: "email",
+          authProviderId: undefined,
+        });
+        const token = await createToken(newUser.id, newUser.username, newUser.email || undefined);
+        return res.json({ token, user: sanitizeUser(newUser) });
+      } catch (createErr: any) {
+        const existing = await storage.getUserByUsername("adotjdot");
+        if (existing) {
+          const token = await createToken(existing.id, existing.username, existing.email || undefined);
+          return res.json({ token, user: sanitizeUser(existing) });
+        }
+        console.error("Dev-login create adotjdot failed:", createErr);
+      }
+
+      // Last resort: hardcoded dev user (friend requests will fail with FK error)
       const devUser = {
         id: "dev-user-adotjdot-001",
         username: "adotjdot",

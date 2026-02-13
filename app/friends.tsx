@@ -1,7 +1,7 @@
 /**
  * Friends screen: Search users, send/accept friend requests, view friends list.
  */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
     View,
     Text,
@@ -78,6 +78,21 @@ export default function FriendsScreen() {
         if (isLoggedIn) loadFriends();
     }, [isLoggedIn, loadFriends]);
 
+    const loadAllUsers = useCallback(async () => {
+        setSearching(true);
+        try {
+            const res = await authFetch<{ users: UserResult[] }>(
+                "GET",
+                "/api/users/search?q="
+            );
+            setSearchResults(res.data?.users || []);
+        } catch {
+            Alert.alert("Error", "Failed to load users.");
+        } finally {
+            setSearching(false);
+        }
+    }, []);
+
     const handleSearch = async () => {
         setSearching(true);
         try {
@@ -93,6 +108,18 @@ export default function FriendsScreen() {
             setSearching(false);
         }
     };
+
+    // When Search tab is shown, load all users so you can add without typing
+    const searchLoadedRef = useRef(false);
+    useEffect(() => {
+        if (tab === "search" && isLoggedIn && !searchLoadedRef.current) {
+            searchLoadedRef.current = true;
+            loadAllUsers();
+        }
+        if (tab !== "search") {
+            searchLoadedRef.current = false;
+        }
+    }, [tab, isLoggedIn, loadAllUsers]);
 
     const sendRequest = async (userId: string) => {
         setActionLoading(userId);
