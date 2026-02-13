@@ -27,6 +27,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ════════════════════════════════════════════════════════════════
 
   /**
+   * POST /api/auth/dev-login
+   * Body: { username: string, pin: string }
+   * Dev-only login. For adotjdot/0215, uses the real DB user when present so friends load from Railway.
+   */
+  app.post("/api/auth/dev-login", async (req, res) => {
+    try {
+      const { username, pin } = req.body;
+
+      // Hardcoded dev credentials
+      if (username !== "adotjdot" || pin !== "0215") {
+        return res.status(401).json({ error: "Invalid username or PIN" });
+      }
+
+      // Prefer real DB user so /api/friends returns Railway data
+      const dbUser = await storage.getUserByUsername("adotjdot");
+      if (dbUser) {
+        const token = await createToken(dbUser.id, dbUser.username, dbUser.email || undefined);
+        res.json({ token, user: sanitizeUser(dbUser) });
+        return;
+      }
+
+      // Fallback: hardcoded dev user when DB has no adotjdot yet
+      const devUser = {
+        id: "dev-user-adotjdot-001",
+        username: "adotjdot",
+        displayName: "adotjdot",
+        email: "adotjdott@gmail.com",
+        avatarUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const token = await createToken(devUser.id, devUser.username, devUser.email);
+      res.json({ token, user: devUser });
+    } catch (err: any) {
+      console.error("Dev login error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  /**
    * POST /api/auth/register
    * Body: { email: string }
    * Sends a magic link email — creates user if new.
@@ -196,6 +236,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
    */
   app.get("/api/auth/me", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
+      // Dev user bypass — no database needed
+      if (req.userId?.startsWith("dev-user-")) {
+        return res.json({
+          user: {
+            id: req.userId,
+            username: "adotjdot",
+            displayName: "adotjdot",
+            email: "adotjdott@gmail.com",
+            avatarUrl: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+
       const user = await storage.getUser(req.userId!);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -249,16 +304,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/users/search", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
-      const q = (req.query.q as string || "").trim();
+      const q = (req.query.q as string || "").trim().toLowerCase();
       if (q.length < 2) {
         return res.json({ users: [] });
       }
-      const results = await storage.searchUsers(q);
-      res.json({
-        users: results
-          .filter((u) => u.id !== req.userId)
-          .map(sanitizeUser),
-      });
+
+      // Mock users for dev/testing
+      const mockUsers = [
+        {
+          id: "mock-user-kelsey",
+          username: "kelsey",
+          displayName: "Kelsey",
+          email: "kelsey@example.com",
+          avatarUrl: "https://i.pravatar.cc/150?u=kelsey",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: "mock-user-joanna",
+          username: "joanna",
+          displayName: "Joanna",
+          email: "joanna@example.com",
+          avatarUrl: "https://i.pravatar.cc/150?u=joanna",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      // Filter mock users
+      const matches = mockUsers.filter(
+        (u) =>
+          u.username.toLowerCase().includes(q) ||
+          u.displayName.toLowerCase().includes(q)
+      );
+
+      if (matches.length > 0) {
+        return res.json({ users: matches });
+      }
+
+      // Try actual DB search (will fail if no DB, so catch and return empty)
+      try {
+        const results = await storage.searchUsers(q);
+        res.json({
+          users: results
+            .filter((u) => u.id !== req.userId)
+            .map(sanitizeUser),
+        });
+      } catch (dbErr) {
+        console.warn("DB search failed, returning empty results:", dbErr);
+        res.json({ users: [] });
+      }
     } catch (err: any) {
       console.error("User search error:", err);
       res.status(500).json({ error: "Internal server error" });
