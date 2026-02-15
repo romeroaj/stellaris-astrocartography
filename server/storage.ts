@@ -2,18 +2,21 @@
  * Storage layer: Database-backed CRUD for users, birth profiles, and friendships.
  * Falls back to in-memory storage if DATABASE_URL is not set.
  */
-import { eq, or, and, ilike, ne, sql } from "drizzle-orm";
+import { eq, or, and, ilike, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
   birthProfiles,
   friendships,
+  customFriends,
   type User,
   type InsertUser,
   type BirthProfile,
   type InsertBirthProfile,
   type Friendship,
   type InsertFriendship,
+  type CustomFriend,
+  type InsertCustomFriend,
 } from "@shared/schema";
 
 // ── Interface ──────────────────────────────────────────────────────
@@ -22,8 +25,10 @@ export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByPhone(phone: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByProviderId(provider: string, providerId: string): Promise<User | undefined>;
+  getUsersByPhones(phones: string[]): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   searchUsers(query: string, limit?: number): Promise<User[]>;
@@ -44,6 +49,13 @@ export interface IStorage {
   removeFriend(userId: string, friendId: string): Promise<void>;
   getFriendship(userId: string, friendId: string): Promise<Friendship | undefined>;
   ensureMockUser(id: string, data: { username: string; displayName: string; email?: string; avatarUrl?: string | null }): Promise<User>;
+
+  // Custom Friends (premium)
+  getCustomFriends(ownerId: string): Promise<CustomFriend[]>;
+  getCustomFriend(id: string, ownerId: string): Promise<CustomFriend | undefined>;
+  createCustomFriend(data: InsertCustomFriend): Promise<CustomFriend>;
+  updateCustomFriend(id: string, ownerId: string, updates: Partial<Omit<CustomFriend, "id" | "ownerId" | "createdAt">>): Promise<CustomFriend | undefined>;
+  deleteCustomFriend(id: string, ownerId: string): Promise<void>;
 }
 
 // ── Database Storage ───────────────────────────────────────────────
@@ -59,6 +71,21 @@ export class DatabaseStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
     return user;
+  }
+
+  async getUserByPhone(phone: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+    return user;
+  }
+
+  async getUsersByPhones(phones: string[]): Promise<User[]> {
+    if (phones.length === 0) return [];
+    const normalized = [...new Set(phones.filter(Boolean))];
+    const results = await db
+      .select()
+      .from(users)
+      .where(inArray(users.phone, normalized));
+    return results;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
@@ -284,6 +311,58 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  // ── Custom Friends ──
+
+  async getCustomFriends(ownerId: string): Promise<CustomFriend[]> {
+    return db
+      .select()
+      .from(customFriends)
+      .where(eq(customFriends.ownerId, ownerId))
+      .orderBy(customFriends.createdAt);
+  }
+
+  async getCustomFriend(id: string, ownerId: string): Promise<CustomFriend | undefined> {
+    const [row] = await db
+      .select()
+      .from(customFriends)
+      .where(
+        and(eq(customFriends.id, id), eq(customFriends.ownerId, ownerId))
+      )
+      .limit(1);
+    return row;
+  }
+
+  async createCustomFriend(data: InsertCustomFriend): Promise<CustomFriend> {
+    const [created] = await db
+      .insert(customFriends)
+      .values(data)
+      .returning();
+    return created;
+  }
+
+  async updateCustomFriend(
+    id: string,
+    ownerId: string,
+    updates: Partial<Omit<CustomFriend, "id" | "ownerId" | "createdAt">>
+  ): Promise<CustomFriend | undefined> {
+    const [updated] = await db
+      .update(customFriends)
+      .set(updates)
+      .where(
+        and(eq(customFriends.id, id), eq(customFriends.ownerId, ownerId))
+      )
+      .returning();
+    return updated;
+  }
+
+  async deleteCustomFriend(id: string, ownerId: string): Promise<void> {
+    await db
+      .delete(customFriends)
+      .where(
+        and(eq(customFriends.id, id), eq(customFriends.ownerId, ownerId))
+      );
   }
 }
 
