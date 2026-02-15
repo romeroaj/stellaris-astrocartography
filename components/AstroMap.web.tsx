@@ -3,6 +3,7 @@ import { View, StyleSheet } from "react-native";
 import { AstroLine } from "@/lib/types";
 import Colors from "@/constants/colors";
 import { classifyLine, SENTIMENT_COLORS, SENTIMENT_LABELS } from "@/lib/lineClassification";
+import { OVERLAP_COLORS, OVERLAP_LABELS } from "@/lib/synastryAnalysis";
 
 interface AstroMapProps {
   lines: AstroLine[];
@@ -10,6 +11,8 @@ interface AstroMapProps {
   birthLon: number;
   onLinePress?: (line: AstroLine) => void;
   colorMode?: "planet" | "simplified";
+  bondMode?: "synastry" | "composite";
+  showOverlapHighlights?: boolean;
 }
 
 let leafletLoaded = false;
@@ -46,7 +49,7 @@ function getDashArray(lineType: string): string | undefined {
   return dashes[lineType] || undefined;
 }
 
-export default function AstroMap({ lines, birthLat, birthLon, onLinePress, colorMode = "planet" }: AstroMapProps) {
+export default function AstroMap({ lines, birthLat, birthLon, onLinePress, colorMode = "planet", bondMode, showOverlapHighlights }: AstroMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const layerGroupRef = useRef<any>(null);
@@ -59,29 +62,59 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
   const colorModeRef = useRef(colorMode);
   colorModeRef.current = colorMode;
 
+  const bondModeRef = useRef(bondMode);
+  bondModeRef.current = bondMode;
+
+  const showOverlapRef = useRef(showOverlapHighlights);
+  showOverlapRef.current = showOverlapHighlights;
+
   const updateLines = useCallback(() => {
     const L = (window as any).L;
     if (!L || !mapRef.current || !layerGroupRef.current) return;
 
     layerGroupRef.current.clearLayers();
 
+    const isSynOverlap = bondModeRef.current === "synastry" && showOverlapRef.current;
+
     linesRef.current.forEach((line) => {
       let color: string;
-      if (colorModeRef.current === "simplified") {
+      if (isSynOverlap) {
+        if (line.isOverlapping && line.overlapClassification) {
+          color = OVERLAP_COLORS[line.overlapClassification];
+        } else {
+          const base = line.sourceId === "user" ? Colors.dark.primary : Colors.dark.secondary;
+          color = base + "20";
+        }
+      } else if (bondModeRef.current === "synastry" && line.sourceId) {
+        color = (line.sourceId === "user" ? Colors.dark.primary : Colors.dark.secondary) + "B2";
+      } else if (colorModeRef.current === "simplified") {
         const classification = classifyLine(line.planet, line.lineType);
         color = SENTIMENT_COLORS[classification.sentiment];
       } else {
         color = Colors.planets[line.planet] || "#FFFFFF";
       }
       const dashArray = getDashArray(line.lineType);
-      const weight = line.lineType === "MC" || line.lineType === "IC" ? 3 : 2.5;
+      let weight = line.lineType === "MC" || line.lineType === "IC" ? 3 : 2.5;
+      if (isSynOverlap) {
+        weight = line.isOverlapping ? weight * 1.6 : weight * 0.5;
+      } else if (bondModeRef.current === "synastry") {
+        weight *= 0.7;
+      }
+      let opacity: number;
+      if (isSynOverlap) {
+        opacity = line.isOverlapping ? 0.9 : 0.15;
+      } else if (bondModeRef.current === "synastry") {
+        opacity = 0.65;
+      } else {
+        opacity = 0.85;
+      }
 
       const coords = line.points.map((pt) => [pt.latitude, pt.longitude] as [number, number]);
 
       const polyline = L.polyline(coords, {
         color,
         weight,
-        opacity: 0.85,
+        opacity,
         dashArray,
         interactive: true,
       });
@@ -94,6 +127,11 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
       const label = lt ? lt.label : line.lineType;
       const planetName = line.planet.charAt(0).toUpperCase() + line.planet.slice(1);
       let tooltipText = `${planetName} ${label}`;
+      if (isSynOverlap && line.isOverlapping && line.overlapClassification) {
+        tooltipText += ` · ${OVERLAP_LABELS[line.overlapClassification]}`;
+      } else if (bondModeRef.current === "synastry" && line.sourceId) {
+        tooltipText += ` (${line.sourceId === "user" ? "You" : "Partner"})`;
+      }
       if (colorModeRef.current === "simplified") {
         const cls = classifyLine(line.planet, line.lineType);
         tooltipText += ` · ${SENTIMENT_LABELS[cls.sentiment]}`;
@@ -191,7 +229,7 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
 
   useEffect(() => {
     updateLines();
-  }, [lines, colorMode, updateLines]);
+  }, [lines, colorMode, bondMode, showOverlapHighlights, updateLines]);
 
   return (
     <View style={styles.webMap}>
