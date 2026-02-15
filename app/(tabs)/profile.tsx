@@ -22,9 +22,10 @@ import { BirthData } from "@/lib/types";
 import {
   getProfiles,
   getActiveProfileId,
-  setActiveProfileId,
-  deleteProfile,
   saveProfile,
+  getSettings,
+  setSettings,
+  AppSettings,
 } from "@/lib/storage";
 import { calculatePlanetPositions, calculateGST } from "@/lib/astronomy";
 import { computeNatalChart, ELEMENT_COLORS, NatalChart } from "@/lib/natal";
@@ -35,6 +36,7 @@ export default function ProfileScreen() {
   const [profiles, setProfiles] = useState<BirthData[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [settings, setSettingsState] = useState<AppSettings>({ includeMinorPlanets: true });
 
   const [editProfile, setEditProfile] = useState<BirthData | null>(null);
   const [editName, setEditName] = useState("");
@@ -50,6 +52,8 @@ export default function ProfileScreen() {
   const [editSearching, setEditSearching] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
 
+  const { user: authUser, isLoggedIn, logout } = useAuth();
+
   const editDayRef = useRef<TextInput>(null);
   const editYearRef = useRef<TextInput>(null);
   const editMinRef = useRef<TextInput>(null);
@@ -64,35 +68,18 @@ export default function ProfileScreen() {
 
   const loadData = async () => {
     setLoading(true);
-    const [profs, id] = await Promise.all([getProfiles(), getActiveProfileId()]);
+    const [profs, id, s] = await Promise.all([getProfiles(), getActiveProfileId(), getSettings()]);
     setProfiles(profs);
     setActiveId(id);
+    setSettingsState(s);
     setLoading(false);
   };
 
-  const handleSetActive = async (id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await setActiveProfileId(id);
-    setActiveId(id);
-  };
-
-  const handleDelete = (profile: BirthData) => {
-    Alert.alert(
-      "Delete Chart",
-      `Remove ${profile.name}'s chart?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            await deleteProfile(profile.id);
-            loadData();
-          },
-        },
-      ]
-    );
+  const toggleMinorPlanets = async () => {
+    const next = !settings.includeMinorPlanets;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await setSettings({ includeMinorPlanets: next });
+    setSettingsState((prev) => ({ ...prev, includeMinorPlanets: next }));
   };
 
   const openEdit = (profile: BirthData) => {
@@ -215,7 +202,7 @@ export default function ProfileScreen() {
     );
   }
 
-  const { user: authUser, isLoggedIn, logout } = useAuth();
+
 
   return (
     <View style={styles.container}>
@@ -241,16 +228,6 @@ export default function ProfileScreen() {
               </View>
             </View>
             <View style={styles.accountActions}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.accountBtn,
-                  pressed && { opacity: 0.7 },
-                ]}
-                onPress={() => router.push("/friends" as any)}
-              >
-                <Ionicons name="people-outline" size={18} color={Colors.dark.primary} />
-                <Text style={styles.accountBtnText}>Friends</Text>
-              </Pressable>
               <Pressable
                 style={({ pressed }) => [
                   styles.accountBtn,
@@ -292,90 +269,72 @@ export default function ProfileScreen() {
           </Pressable>
         )}
 
-        {/* Section title */}
-        <Text style={styles.sectionTitle}>Birth Charts</Text>
-        {profiles.map((profile) => {
-          const isActive = profile.id === activeId;
-          return (
-            <Pressable
-              key={profile.id}
-              style={({ pressed }) => [
-                styles.profileCard,
-                isActive && styles.profileCardActive,
-                pressed && { opacity: 0.8 },
-              ]}
-              onPress={() => handleSetActive(profile.id)}
-              onLongPress={() => handleDelete(profile)}
-            >
-              <LinearGradient
-                colors={
-                  isActive
-                    ? [Colors.dark.primaryMuted, Colors.dark.card]
-                    : [Colors.dark.card, Colors.dark.surface]
-                }
-                style={styles.profileGradient}
+        {/* Your Birth Chart - 1 chart per account */}
+        <Text style={styles.sectionTitle}>Your Birth Chart</Text>
+        {profiles.length === 0 ? (
+          <Pressable
+            style={({ pressed }) => [styles.addButton, pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/onboarding");
+            }}
+          >
+            <Ionicons name="add-circle-outline" size={24} color={Colors.dark.primary} />
+            <Text style={styles.addButtonText}>Set up your birth chart</Text>
+          </Pressable>
+        ) : (
+          (() => {
+            const profile = profiles.find((p) => p.id === activeId) || profiles[0];
+            if (!profile) return null;
+            return (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.profileCard,
+                  styles.profileCardActive,
+                  pressed && { opacity: 0.8 },
+                ]}
               >
-                <View style={styles.profileTop}>
-                  <View style={[styles.profileAvatar, isActive && styles.profileAvatarActive]}>
-                    <Ionicons
-                      name="person"
-                      size={24}
-                      color={isActive ? Colors.dark.primary : Colors.dark.textSecondary}
-                    />
-                  </View>
-                  <View style={styles.profileInfo}>
-                    <Text style={styles.profileName}>{profile.name}</Text>
-                    <Text style={styles.profileDate}>{formatDate(profile.date)}</Text>
-                  </View>
-                  <Pressable
-                    style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.6 }]}
-                    onPress={() => openEdit(profile)}
-                    hitSlop={8}
-                  >
-                    <Ionicons name="create-outline" size={20} color={Colors.dark.textSecondary} />
-                  </Pressable>
-                  {isActive && (
-                    <View style={styles.activeBadge}>
-                      <Ionicons name="checkmark-circle" size={14} color={Colors.dark.primary} />
-                      <Text style={styles.activeBadgeText}>Active</Text>
+                <LinearGradient
+                  colors={[Colors.dark.primaryMuted, Colors.dark.card]}
+                  style={styles.profileGradient}
+                >
+                  <View style={styles.profileTop}>
+                    <View style={[styles.profileAvatar, styles.profileAvatarActive]}>
+                      <Ionicons name="person" size={24} color={Colors.dark.primary} />
                     </View>
-                  )}
-                </View>
-                <View style={styles.profileDetails}>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="time-outline" size={14} color={Colors.dark.textMuted} />
-                    <Text style={styles.detailText}>{formatTime12(profile.time)}</Text>
+                    <View style={styles.profileInfo}>
+                      <Text style={styles.profileName}>{profile.name}</Text>
+                      <Text style={styles.profileDate}>{formatDate(profile.date)}</Text>
+                    </View>
+                    <Pressable
+                      style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.6 }]}
+                      onPress={() => openEdit(profile)}
+                      hitSlop={8}
+                    >
+                      <Ionicons name="create-outline" size={20} color={Colors.dark.textSecondary} />
+                    </Pressable>
                   </View>
-                  <View style={styles.detailItem}>
-                    <Ionicons name="location-outline" size={14} color={Colors.dark.textMuted} />
-                    <Text style={styles.detailText} numberOfLines={1}>
-                      {profile.locationName.split(",")[0]}
-                    </Text>
+                  <View style={styles.profileDetails}>
+                    <View style={styles.detailItem}>
+                      <Ionicons name="time-outline" size={14} color={Colors.dark.textMuted} />
+                      <Text style={styles.detailText}>{formatTime12(profile.time)}</Text>
+                    </View>
+                    <View style={styles.detailItem}>
+                      <Ionicons name="location-outline" size={14} color={Colors.dark.textMuted} />
+                      <Text style={styles.detailText} numberOfLines={1}>
+                        {profile.locationName.split(",")[0]}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              </LinearGradient>
-            </Pressable>
-          );
-        })}
-
-        {profiles.length > 0 && (
-          <Text style={styles.hint}>Long press a chart to delete it</Text>
+                </LinearGradient>
+              </Pressable>
+            );
+          })()
         )}
 
-        <Pressable
-          style={({ pressed }) => [styles.addButton, pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] }]}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push({ pathname: "/onboarding", params: { skipFtux: "true" } });
-          }}
-        >
-          <Ionicons name="add-circle-outline" size={24} color={Colors.dark.primary} />
-          <Text style={styles.addButtonText}>Add New Chart</Text>
-        </Pressable>
-
         {/* ── Natal Chart Card ── */}
-        {profiles.length > 0 && activeId && (() => {
-          const active = profiles.find(p => p.id === activeId);
+        {profiles.length > 0 && (() => {
+          const active = profiles.find(p => p.id === activeId) || profiles[0];
           if (!active) return null;
           const [year, month, day] = active.date.split("-").map(Number);
           const [hour, minute] = active.time.split(":").map(Number);
@@ -411,6 +370,37 @@ export default function ProfileScreen() {
             </View>
           );
         })()}
+
+        {/* Settings - at bottom */}
+        <Text style={[styles.sectionTitle, { marginTop: 32 }]}>Settings</Text>
+        <View style={styles.settingsCard}>
+          <View style={styles.settingsRow}>
+            <View style={styles.settingsRowLeft}>
+              <Ionicons name="planet-outline" size={20} color={Colors.dark.textSecondary} />
+              <View>
+                <Text style={styles.settingsLabel}>Minor Planets & Bodies</Text>
+                <Text style={styles.settingsDesc}>
+                  Chiron, Nodes, Lilith, Ceres, Pallas, Juno, Vesta
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              style={[
+                styles.toggle,
+                settings.includeMinorPlanets && styles.toggleActive,
+              ]}
+              onPress={toggleMinorPlanets}
+            >
+              <View
+                style={[
+                  styles.toggleThumb,
+                  settings.includeMinorPlanets && styles.toggleThumbActive,
+                ]}
+              />
+            </Pressable>
+          </View>
+        </View>
+
         <View style={{ height: 120 }} />
       </ScrollView>
 
@@ -1015,6 +1005,56 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_400Regular",
     color: Colors.dark.textSecondary,
     lineHeight: 18,
+  },
+  settingsCard: {
+    backgroundColor: Colors.dark.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+  },
+  settingsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  settingsRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  settingsLabel: {
+    fontSize: 15,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.text,
+  },
+  settingsDesc: {
+    fontSize: 12,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textMuted,
+    marginTop: 2,
+  },
+  toggle: {
+    width: 52,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.dark.cardBorder,
+    padding: 2,
+    justifyContent: "center",
+  },
+  toggleActive: {
+    backgroundColor: Colors.dark.primary,
+  },
+  toggleThumb: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.dark.surface,
+  },
+  toggleThumbActive: {
+    alignSelf: "flex-end",
   },
   sectionTitle: {
     fontSize: 18,

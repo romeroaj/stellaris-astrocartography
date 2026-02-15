@@ -4,6 +4,31 @@ import { BirthData } from "./types";
 const PROFILES_KEY = "@stellaris_profiles";
 const ACTIVE_PROFILE_KEY = "@stellaris_active_profile";
 const FTUX_SEEN_KEY = "@stellaris_ftux_seen";
+const SETTINGS_KEY = "@stellaris_settings";
+
+export interface AppSettings {
+  includeMinorPlanets: boolean;
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  includeMinorPlanets: true,
+};
+
+export async function getSettings(): Promise<AppSettings> {
+  const data = await AsyncStorage.getItem(SETTINGS_KEY);
+  if (!data) return DEFAULT_SETTINGS;
+  try {
+    return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+export async function setSettings(settings: Partial<AppSettings>): Promise<void> {
+  const current = await getSettings();
+  const next = { ...current, ...settings };
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+}
 
 export async function saveProfile(profile: BirthData): Promise<void> {
   const profiles = await getProfiles();
