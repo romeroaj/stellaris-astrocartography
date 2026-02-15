@@ -27,6 +27,7 @@ function RootLayoutNav() {
       <Stack.Screen name="auth" options={{ presentation: "fullScreenModal", animation: "fade" }} />
       <Stack.Screen name="friends" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="line-detail" options={{ presentation: "modal" }} />
+      <Stack.Screen name="city-detail" options={{ presentation: "modal" }} />
     </Stack>
   );
 }

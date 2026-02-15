@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
     View,
     Text,
@@ -14,7 +14,7 @@ import { router, useFocusEffect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { BirthData, PlanetName, LineType } from "@/lib/types";
-import { getActiveProfile } from "@/lib/storage";
+import { getActiveProfile, getSettings } from "@/lib/storage";
 import { calculatePlanetPositions, calculateGST, generateAstroLines } from "@/lib/astronomy";
 import {
     getInterpretation,
@@ -22,10 +22,13 @@ import {
     getPlanetIcon,
 } from "@/lib/interpretations";
 import { classifyLine, SENTIMENT_COLORS, LineSentiment } from "@/lib/lineClassification";
+import { filterPlanets, MINOR_PLANETS } from "@/lib/settings";
 
-const ALL_PLANETS: PlanetName[] = [
+const ALL_PLANETS_RAW: PlanetName[] = [
     "sun", "moon", "mercury", "venus", "mars",
-    "jupiter", "saturn", "uranus", "neptune", "pluto",
+    "jupiter", "saturn", "uranus", "neptune", "pluto", "chiron",
+    "northnode", "southnode", "lilith",
+    "ceres", "pallas", "juno", "vesta",
 ];
 
 export default function LearnScreen() {
@@ -33,12 +36,15 @@ export default function LearnScreen() {
     const [profile, setProfile] = useState<BirthData | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<"about" | "lines">("about");
+    const [includeMinorPlanets, setIncludeMinorPlanets] = useState(true);
 
     const topInset = Platform.OS === "web" ? 67 : insets.top;
+    const allPlanets = useMemo(() => filterPlanets(ALL_PLANETS_RAW, includeMinorPlanets), [includeMinorPlanets]);
 
     useFocusEffect(
         useCallback(() => {
             loadProfile();
+            getSettings().then((s) => setIncludeMinorPlanets(s.includeMinorPlanets));
         }, [])
     );
 
@@ -153,7 +159,15 @@ export default function LearnScreen() {
                         { planet: "uranus" as PlanetName, energy: "Rebellion, innovation, surprise", vibe: "neutral" },
                         { planet: "neptune" as PlanetName, energy: "Dreams, spirituality, illusion", vibe: "neutral" },
                         { planet: "pluto" as PlanetName, energy: "Transformation, power, rebirth", vibe: "difficult" },
-                    ].map(({ planet, energy, vibe }) => (
+                        { planet: "chiron" as PlanetName, energy: "Healing, wounds, wisdom, mentorship", vibe: "neutral" },
+                        { planet: "northnode" as PlanetName, energy: "Destiny, life purpose, soul growth", vibe: "positive" },
+                        { planet: "southnode" as PlanetName, energy: "Past lives, karma, comfort zone", vibe: "neutral" },
+                        { planet: "lilith" as PlanetName, energy: "Shadow self, raw power, liberation", vibe: "neutral" },
+                        { planet: "ceres" as PlanetName, energy: "Nurturing, harvest, motherhood", vibe: "neutral" },
+                        { planet: "pallas" as PlanetName, energy: "Wisdom, strategy, creative intelligence", vibe: "neutral" },
+                        { planet: "juno" as PlanetName, energy: "Commitment, marriage, equality", vibe: "neutral" },
+                        { planet: "vesta" as PlanetName, energy: "Devotion, sacred focus, service", vibe: "neutral" },
+                    ].filter(({ planet }) => includeMinorPlanets || !MINOR_PLANETS.includes(planet)).map(({ planet, energy, vibe }) => (
                         <View key={planet} style={styles.planetEnergy}>
                             <View style={[styles.planetDot, { backgroundColor: Colors.planets[planet] }]} />
                             <Text style={[styles.planetLabel, { color: Colors.planets[planet] }]}>
@@ -182,7 +196,7 @@ export default function LearnScreen() {
                             <Text style={styles.emptyText}>Set up your birth data first</Text>
                         </View>
                     ) : (
-                        ALL_PLANETS.map((planet) => (
+                        allPlanets.map((planet) => (
                             <View key={planet} style={styles.planetSection}>
                                 <View style={styles.planetHeader}>
                                     <View style={[styles.planetIcon, { backgroundColor: Colors.planets[planet] + "20" }]}>
