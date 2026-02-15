@@ -152,6 +152,46 @@ function getPlanetElements(planet: PlanetName, T: number): OrbitalElements | nul
       omega: [113.76, 0],
       Omega: [110.30, 0],
     },
+    chiron: {
+      L: [309.8, 714.5],
+      a: [13.699, 0],
+      e: [0.378, 0],
+      i: [6.92, 0],
+      omega: [339.25, 0],
+      Omega: [209.30, 0],
+    },
+    ceres: {
+      L: [231.36, 7809.0],
+      a: [2.7658, 0],
+      e: [0.0760, 0],
+      i: [10.59, 0],
+      omega: [73.60, 0],
+      Omega: [80.39, 0],
+    },
+    pallas: {
+      L: [7.49, 7807.0],
+      a: [2.7716, 0],
+      e: [0.2313, 0],
+      i: [34.83, 0],
+      omega: [310.20, 0],
+      Omega: [173.09, 0],
+    },
+    juno: {
+      L: [173.68, 8259.0],
+      a: [2.6691, 0],
+      e: [0.2562, 0],
+      i: [12.99, 0],
+      omega: [248.41, 0],
+      Omega: [169.87, 0],
+    },
+    vesta: {
+      L: [274.55, 9920.0],
+      a: [2.3615, 0],
+      e: [0.0887, 0],
+      i: [7.14, 0],
+      omega: [149.84, 0],
+      Omega: [103.85, 0],
+    },
   };
 
   const el = elements[planet];
@@ -358,6 +398,7 @@ export function calculatePlanetPositions(
 
   const planets: PlanetName[] = [
     "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto",
+    "chiron", "ceres", "pallas", "juno", "vesta",
   ];
 
   for (const planet of planets) {
@@ -365,6 +406,20 @@ export function calculatePlanetPositions(
     const { ra, dec } = eclipticToEquatorial(geo.lon, geo.lat, obliquity);
     positions.push({ name: planet, ra, dec, eclipticLon: geo.lon });
   }
+
+  // ── Lunar Nodes (mathematical points on the ecliptic) ──
+  const northNodeLon = normalizeAngle(125.0446 - 1934.1363 * T);
+  const nnEq = eclipticToEquatorial(northNodeLon, 0, obliquity);
+  positions.push({ name: "northnode", ra: nnEq.ra, dec: nnEq.dec, eclipticLon: northNodeLon });
+
+  const southNodeLon = normalizeAngle(northNodeLon + 180);
+  const snEq = eclipticToEquatorial(southNodeLon, 0, obliquity);
+  positions.push({ name: "southnode", ra: snEq.ra, dec: snEq.dec, eclipticLon: southNodeLon });
+
+  // ── Black Moon Lilith (mean lunar apogee) ──
+  const lilithLon = normalizeAngle(263.3532 + 4069.0137 * T);
+  const lilEq = eclipticToEquatorial(lilithLon, 0, obliquity);
+  positions.push({ name: "lilith", ra: lilEq.ra, dec: lilEq.dec, eclipticLon: lilithLon });
 
   return positions;
 }
@@ -388,9 +443,46 @@ export function calculateGST(
   return greenwichSiderealTime(jd);
 }
 
+/**
+ * Composite chart: midpoint of each planet's position between two charts.
+ * Used for "Relationship Destiny" bond view.
+ */
+export function computeCompositePositions(
+  positions1: PlanetPosition[],
+  positions2: PlanetPosition[],
+  gst1: number,
+  gst2: number
+): { positions: PlanetPosition[]; gst: number } {
+  const T = centuriesFromJ2000(julianDay(2000, 6, 21, 12));
+  const obliquity = obliquityOfEcliptic(T);
+  const positions: PlanetPosition[] = [];
+  const names = [...new Set([...positions1.map((p) => p.name), ...positions2.map((p) => p.name)])];
+
+  for (const name of names) {
+    const p1 = positions1.find((p) => p.name === name);
+    const p2 = positions2.find((p) => p.name === name);
+    if (!p1 || !p2) continue;
+
+    const lon1 = p1.eclipticLon;
+    const lon2 = p2.eclipticLon;
+    let midLon = (lon1 + lon2) / 2;
+    if (Math.abs(lon1 - lon2) > 180) midLon = (midLon + 180) % 360;
+    midLon = normalizeAngle(midLon);
+
+    const { ra, dec } = eclipticToEquatorial(midLon, 0, obliquity);
+    positions.push({ name: p1.name as PlanetName, ra, dec, eclipticLon: midLon });
+  }
+
+  let midGst = (gst1 + gst2) / 2;
+  if (Math.abs(gst1 - gst2) > 180) midGst = (midGst + 180) % 360;
+  midGst = normalizeAngle(midGst);
+  return { positions, gst: midGst };
+}
+
 export function generateAstroLines(
   positions: PlanetPosition[],
-  gst: number
+  gst: number,
+  sourceId?: "user" | "partner"
 ): AstroLine[] {
   const lines: AstroLine[] = [];
 
@@ -402,13 +494,13 @@ export function generateAstroLines(
     for (let lat = -89; lat <= 89; lat += 2) {
       mcPoints.push({ latitude: lat, longitude: mcLon });
     }
-    lines.push({ planet: planet.name, lineType: "MC", points: mcPoints });
+    lines.push({ planet: planet.name, lineType: "MC", points: mcPoints, ...(sourceId && { sourceId }) });
 
     const icPoints: { latitude: number; longitude: number }[] = [];
     for (let lat = -89; lat <= 89; lat += 2) {
       icPoints.push({ latitude: lat, longitude: icLon });
     }
-    lines.push({ planet: planet.name, lineType: "IC", points: icPoints });
+    lines.push({ planet: planet.name, lineType: "IC", points: icPoints, ...(sourceId && { sourceId }) });
 
     const ascPoints: { latitude: number; longitude: number }[] = [];
     const dscPoints: { latitude: number; longitude: number }[] = [];
@@ -445,14 +537,14 @@ export function generateAstroLines(
     if (ascPoints.length > 2) {
       const splitAsc = splitLineAtDateline(ascPoints);
       for (const segment of splitAsc) {
-        lines.push({ planet: planet.name, lineType: "ASC", points: segment });
+        lines.push({ planet: planet.name, lineType: "ASC", points: segment, ...(sourceId && { sourceId }) });
       }
     }
 
     if (dscPoints.length > 2) {
       const splitDsc = splitLineAtDateline(dscPoints);
       for (const segment of splitDsc) {
-        lines.push({ planet: planet.name, lineType: "DSC", points: segment });
+        lines.push({ planet: planet.name, lineType: "DSC", points: segment, ...(sourceId && { sourceId }) });
       }
     }
   }
@@ -488,13 +580,15 @@ function splitLineAtDateline(
   return segments;
 }
 
+export type SideOfLine = "west" | "east" | "on";
+
 export function findNearestLines(
   lines: AstroLine[],
   lat: number,
   lon: number,
   maxDistanceDeg: number = 15
-): { planet: PlanetName; lineType: LineType; distance: number; influence: string }[] {
-  const results: { planet: PlanetName; lineType: LineType; distance: number; influence: string }[] = [];
+): { planet: PlanetName; lineType: LineType; distance: number; influence: string; side: SideOfLine }[] {
+  const results: { planet: PlanetName; lineType: LineType; distance: number; influence: string; side: SideOfLine }[] = [];
   const seen = new Set<string>();
 
   for (const line of lines) {
@@ -503,22 +597,25 @@ export function findNearestLines(
       const existing = results.find((r) => `${r.planet}-${r.lineType}` === key);
       if (existing) {
         let minDist = Infinity;
+        let nearestLon = 0;
         for (const pt of line.points) {
           const d = haversineDistance(lat, lon, pt.latitude, pt.longitude);
-          if (d < minDist) minDist = d;
+          if (d < minDist) { minDist = d; nearestLon = pt.longitude; }
         }
         if (minDist < existing.distance) {
           existing.distance = minDist;
           existing.influence = getInfluence(minDist);
+          existing.side = determineSide(lon, nearestLon, minDist);
         }
       }
       continue;
     }
 
     let minDist = Infinity;
+    let nearestLon = 0;
     for (const pt of line.points) {
       const d = haversineDistance(lat, lon, pt.latitude, pt.longitude);
-      if (d < minDist) minDist = d;
+      if (d < minDist) { minDist = d; nearestLon = pt.longitude; }
     }
 
     if (minDist <= maxDistanceDeg * 111) {
@@ -528,11 +625,22 @@ export function findNearestLines(
         lineType: line.lineType as LineType,
         distance: minDist,
         influence: getInfluence(minDist),
+        side: determineSide(lon, nearestLon, minDist),
       });
     }
   }
 
   return results.sort((a, b) => a.distance - b.distance);
+}
+
+/** Determine if a city is east or west of the nearest line point. */
+function determineSide(cityLon: number, lineLon: number, distKm: number): SideOfLine {
+  if (distKm < 30) return "on";
+  let diff = cityLon - lineLon;
+  // Handle dateline wrapping
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+  return diff > 0 ? "east" : "west";
 }
 
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
