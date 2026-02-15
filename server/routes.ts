@@ -2,17 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "node:http";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
-import {
-  createToken,
-  verifyMagicToken,
-  generateMagicToken,
-  verifyAppleToken,
-  verifyGoogleToken,
-  requireAuth,
-  optionalAuth,
-  type AuthenticatedRequest,
-} from "./auth";
-import { sendMagicLinkEmail } from "./email";
+import { requireAuth, optionalAuth, type AuthenticatedRequest } from "./auth";
 
 function slugify(input: string): string {
   return input
@@ -39,264 +29,55 @@ const MOCK_USERS_DATA: Record<string, { username: string; displayName: string; e
 // Seeded test users (with birth profiles) — auto-accept friend requests so you can test Bonds
 const TEST_USERNAMES = new Set(["kelsey_wood", "emma_star", "tina_cosmic", "joanna_voyager"]);
 
+/** Premium subscription check. Stub: returns true for dev. Wire to RevenueCat/subscriptions later. */
+function isPremiumUser(_userId: string): boolean {
+  return true;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // ════════════════════════════════════════════════════════════════
   //  AUTH ROUTES
   // ════════════════════════════════════════════════════════════════
 
   /**
-   * POST /api/auth/dev-login
-   * Body: { username: string, pin: string }
-   * Dev-only login. For adotjdot/0215, uses the real DB user when present so friends load from Railway.
-   */
-  app.post("/api/auth/dev-login", async (req, res) => {
-    try {
-      const body = req.body && typeof req.body === "object" ? req.body : {};
-      const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
-      const pin = typeof body.pin === "string" ? body.pin : "";
-
-      // Hardcoded dev credentials
-      if (username !== "adotjdot" || pin !== "0215") {
-        return res.status(401).json({ error: "Invalid username or PIN" });
-      }
-
-      // Prefer real DB user so /api/friends returns Railway data
-      let dbUser: User | undefined;
-      try {
-        dbUser = await storage.getUserByUsername("adotjdot");
-      } catch (e) {
-        console.error("Dev-login DB lookup failed, using fallback user:", e);
-      }
-      if (dbUser) {
-        const token = await createToken(dbUser.id, dbUser.username, dbUser.email || undefined);
-        const userPayload = sanitizeUser(dbUser);
-        return res.json({ token, user: { ...userPayload, createdAt: userPayload.createdAt instanceof Date ? userPayload.createdAt.toISOString() : userPayload.createdAt } });
-      }
-
-      // Create adotjdot in DB so friend requests work (FK requires requester to exist in users)
-      try {
-        const newUser = await storage.createUser({
-          username: "adotjdot",
-          displayName: "adotjdot",
-          email: "adotjdott@gmail.com",
-          authProvider: "email",
-          authProviderId: undefined,
-        });
-        const token = await createToken(newUser.id, newUser.username, newUser.email || undefined);
-        return res.json({ token, user: sanitizeUser(newUser) });
-      } catch (createErr: any) {
-        const existing = await storage.getUserByUsername("adotjdot");
-        if (existing) {
-          const token = await createToken(existing.id, existing.username, existing.email || undefined);
-          return res.json({ token, user: sanitizeUser(existing) });
-        }
-        console.error("Dev-login create adotjdot failed:", createErr);
-      }
-
-      // Last resort: hardcoded dev user (friend requests will fail with FK error)
-      const devUser = {
-        id: "dev-user-adotjdot-001",
-        username: "adotjdot",
-        displayName: "adotjdot",
-        email: "adotjdott@gmail.com",
-        avatarUrl: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const token = await createToken(devUser.id, devUser.username, devUser.email);
-      return res.json({ token, user: devUser });
-    } catch (err: any) {
-      console.error("Dev login error (full):", err?.message ?? err, err?.stack);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  /**
-   * POST /api/auth/register
-   * Body: { email: string }
-   * Sends a magic link email — creates user if new.
-   */
-  app.post("/api/auth/register", async (req, res) => {
-    try {
-      const { email } = req.body;
-      if (!email || typeof email !== "string") {
-        return res.status(400).json({ error: "Email is required" });
-      }
-
-      const normalizedEmail = email.toLowerCase().trim();
-      const magicToken = generateMagicToken(normalizedEmail);
-      const result = await sendMagicLinkEmail(normalizedEmail, magicToken);
-
-      if (!result.success) {
-        return res.status(500).json({ error: result.error || "Failed to send email" });
-      }
-
-      res.json({ success: true, message: "Check your email for a sign-in link" });
-    } catch (err: any) {
-      console.error("Register error:", err);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  /**
-   * POST /api/auth/verify
-   * Body: { token: string }
-   * Verifies the magic link token, creates user if new, returns JWT.
-   */
-  app.post("/api/auth/verify", async (req, res) => {
-    try {
-      const { token } = req.body;
-      if (!token) {
-        return res.status(400).json({ error: "Token is required" });
-      }
-
-      const email = verifyMagicToken(token);
-      if (!email) {
-        return res.status(401).json({ error: "Invalid or expired token" });
-      }
-
-      // Find or create user
-      let user = await storage.getUserByEmail(email);
-      if (!user) {
-        // Auto-generate username from email prefix
-        const emailPrefix = email.split("@")[0];
-        let username = slugify(emailPrefix);
-
-        // Ensure uniqueness
-        let existing = await storage.getUserByUsername(username);
-        let suffix = 1;
-        while (existing) {
-          username = slugify(emailPrefix) + suffix;
-          existing = await storage.getUserByUsername(username);
-          suffix++;
-        }
-
-        user = await storage.createUser({
-          email,
-          username,
-          displayName: emailPrefix,
-          authProvider: "email",
-        });
-      }
-
-      const jwt = await createToken(user.id, user.username, user.email || undefined);
-      res.json({ token: jwt, user: sanitizeUser(user) });
-    } catch (err: any) {
-      console.error("Verify error:", err);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  /**
-   * POST /api/auth/social
-   * Body: { provider: "apple" | "google", idToken: string, displayName?: string }
-   * Verifies the social ID token, creates user if new, returns JWT.
-   */
-  app.post("/api/auth/social", async (req, res) => {
-    try {
-      const { provider, idToken, displayName } = req.body;
-      if (!provider || !idToken) {
-        return res.status(400).json({ error: "Provider and idToken are required" });
-      }
-
-      let sub: string;
-      let email: string | undefined;
-      let name: string | undefined;
-      let avatar: string | undefined;
-
-      if (provider === "apple") {
-        const appleData = await verifyAppleToken(idToken);
-        if (!appleData) {
-          return res.status(401).json({ error: "Invalid Apple token" });
-        }
-        sub = appleData.sub;
-        email = appleData.email;
-        name = displayName;
-      } else if (provider === "google") {
-        const googleData = await verifyGoogleToken(idToken);
-        if (!googleData) {
-          return res.status(401).json({ error: "Invalid Google token" });
-        }
-        sub = googleData.sub;
-        email = googleData.email;
-        name = googleData.name || displayName;
-        avatar = googleData.picture;
-      } else {
-        return res.status(400).json({ error: "Unsupported provider" });
-      }
-
-      // Find existing user by provider ID
-      let user = await storage.getUserByProviderId(provider, sub);
-
-      // Or match by email
-      if (!user && email) {
-        user = await storage.getUserByEmail(email);
-        if (user) {
-          // Link this social provider to existing account
-          await storage.updateUser(user.id, {
-            authProvider: provider,
-            authProviderId: sub,
-          });
-        }
-      }
-
-      // Create new user
-      if (!user) {
-        const baseName = name || email?.split("@")[0] || "user";
-        let username = slugify(baseName);
-
-        let existing = await storage.getUserByUsername(username);
-        let suffix = 1;
-        while (existing) {
-          username = slugify(baseName) + suffix;
-          existing = await storage.getUserByUsername(username);
-          suffix++;
-        }
-
-        user = await storage.createUser({
-          email: email || null,
-          username,
-          displayName: name || baseName,
-          authProvider: provider,
-          authProviderId: sub,
-        });
-
-        if (avatar) {
-          await storage.updateUser(user.id, { avatarUrl: avatar });
-          user.avatarUrl = avatar;
-        }
-      }
-
-      const jwt = await createToken(user.id, user.username, user.email || undefined);
-      res.json({ token: jwt, user: sanitizeUser(user) });
-    } catch (err: any) {
-      console.error("Social auth error:", err);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  /**
    * GET /api/auth/me
-   * Returns the current authenticated user.
+   * Returns the current authenticated user. If Supabase JWT and no app user yet, creates one.
    */
   app.get("/api/auth/me", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
-      // Dev user bypass — no database needed
-      if (req.userId?.startsWith("dev-user-")) {
-        return res.json({
-          user: {
-            id: req.userId,
-            username: "adotjdot",
-            displayName: "adotjdot",
-            email: "adotjdott@gmail.com",
-            avatarUrl: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
+      let user = await storage.getUser(req.userId!);
+      const payload = req.userPayload as any;
+
+      // Supabase first-time: create app user from JWT payload
+      if (!user && payload?.user_metadata != null) {
+        const email = payload.email ?? null;
+        const name =
+          payload.user_metadata?.full_name ??
+          payload.user_metadata?.name ??
+          (email ? email.split("@")[0] : "User");
+        let username = slugify(name);
+        let existing = await storage.getUserByUsername(username);
+        let suffix = 1;
+        while (existing) {
+          username = slugify(name) + suffix;
+          existing = await storage.getUserByUsername(username);
+          suffix++;
+        }
+        const provider = payload.app_metadata?.provider ?? "supabase";
+        user = await storage.createUser({
+          id: req.userId!,
+          email: email ?? undefined,
+          username,
+          displayName: name,
+          authProvider: provider === "apple" ? "apple" : provider === "google" ? "google" : "email",
+          authProviderId: req.userId!,
         });
+        if (payload.user_metadata?.avatar_url) {
+          await storage.updateUser(user.id, { avatarUrl: payload.user_metadata.avatar_url });
+          user.avatarUrl = payload.user_metadata.avatar_url;
+        }
       }
 
-      const user = await storage.getUser(req.userId!);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -335,8 +116,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "User not found" });
       }
 
-      const jwt = await createToken(user.id, user.username, user.email || undefined);
-      res.json({ token: jwt, user: sanitizeUser(user) });
+      res.json({ user: sanitizeUser(user) });
     } catch (err: any) {
       console.error("Username error:", err);
       res.status(500).json({ error: "Internal server error" });
@@ -385,6 +165,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json({ users: [] });
     } catch (err: any) {
       console.error("User search error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  /**
+   * POST /api/users/by-phones
+   * Body: { phones: string[] } — E.164 or raw numbers (we normalize)
+   * Returns Stellaris users whose phone is in the list (excluding current user). Auth required.
+   */
+  app.post("/api/users/by-phones", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const raw = req.body?.phones;
+      const arr = Array.isArray(raw) ? raw : [];
+      const phones = [...new Set(arr.map((p: unknown) => String(p).replace(/\D/g, "").trim()).filter(Boolean))];
+      const e164List = phones.map((p) => (p.length <= 10 ? `+1${p}` : `+${p}`));
+
+      const usersFound = await storage.getUsersByPhones(e164List);
+      const filtered = usersFound.filter((u) => u.id !== req.userId);
+      return res.json({ users: filtered.map(sanitizeUser) });
+    } catch (err: any) {
+      console.error("By-phones error:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -481,6 +282,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 birthDate: activeProfile.birthDate,
                 birthTime: activeProfile.birthTime,
                 locationName: activeProfile.locationName,
+                latitude: activeProfile.latitude,
+                longitude: activeProfile.longitude,
               }
               : null,
           };
@@ -595,6 +398,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ profile: activeProfile });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  //  CUSTOM FRIENDS (Premium)
+  // ════════════════════════════════════════════════════════════════
+
+  app.get("/api/me/premium", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      res.json({ premium: isPremiumUser(req.userId!) });
+    } catch {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/custom-friends", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!isPremiumUser(req.userId!)) {
+        return res.status(403).json({ error: "Premium subscription required" });
+      }
+      const list = await storage.getCustomFriends(req.userId!);
+      res.json({ customFriends: list });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/custom-friends/:id", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = req.params.id as string;
+      const cf = await storage.getCustomFriend(id, req.userId!);
+      if (!cf) {
+        return res.status(404).json({ error: "Custom friend not found" });
+      }
+      res.json({ customFriend: cf });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/custom-friends", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!isPremiumUser(req.userId!)) {
+        return res.status(403).json({ error: "Premium subscription required" });
+      }
+      const { name, birthDate, birthTime, latitude, longitude, locationName } = req.body;
+      if (!name || !birthDate || !birthTime || latitude == null || longitude == null || !locationName) {
+        return res.status(400).json({ error: "name, birthDate, birthTime, latitude, longitude, locationName required" });
+      }
+      const cf = await storage.createCustomFriend({
+        ownerId: req.userId!,
+        name: String(name),
+        birthDate: String(birthDate),
+        birthTime: String(birthTime),
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        locationName: String(locationName),
+      });
+      res.json({ customFriend: cf });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.put("/api/custom-friends/:id", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!isPremiumUser(req.userId!)) {
+        return res.status(403).json({ error: "Premium subscription required" });
+      }
+      const id = req.params.id as string;
+      const { name, birthDate, birthTime, latitude, longitude, locationName } = req.body;
+      const updates: Record<string, unknown> = {};
+      if (name != null) updates.name = String(name);
+      if (birthDate != null) updates.birthDate = String(birthDate);
+      if (birthTime != null) updates.birthTime = String(birthTime);
+      if (latitude != null) updates.latitude = Number(latitude);
+      if (longitude != null) updates.longitude = Number(longitude);
+      if (locationName != null) updates.locationName = String(locationName);
+      const cf = await storage.updateCustomFriend(id, req.userId!, updates);
+      if (!cf) return res.status(404).json({ error: "Custom friend not found" });
+      res.json({ customFriend: cf });
+    } catch (err: any) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/custom-friends/:id", requireAuth as any, async (req: AuthenticatedRequest, res) => {
+    try {
+      const id = req.params.id as string;
+      await storage.deleteCustomFriend(id, req.userId!);
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: "Internal server error" });
     }
