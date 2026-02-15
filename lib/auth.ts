@@ -1,14 +1,19 @@
 /**
  * Client-side auth utilities: Token storage and authenticated API calls.
+ * When Supabase is configured, token comes from Supabase session.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApiUrl } from "./query-client";
+import { isSupabaseConfigured, getSupabaseAccessToken, supabase } from "./supabase";
 
 const AUTH_TOKEN_KEY = "@stellaris_auth_token";
 
 // ── Token Storage ──────────────────────────────────────────────────
 
 export async function getToken(): Promise<string | null> {
+    if (isSupabaseConfigured) {
+        return await getSupabaseAccessToken();
+    }
     try {
         return await AsyncStorage.getItem(AUTH_TOKEN_KEY);
     } catch {
@@ -17,10 +22,17 @@ export async function getToken(): Promise<string | null> {
 }
 
 export async function setToken(token: string): Promise<void> {
+    if (isSupabaseConfigured) {
+        return; // Session is managed by Supabase
+    }
     await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
 }
 
 export async function clearToken(): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+        await supabase.auth.signOut();
+        return;
+    }
     await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
 }
 

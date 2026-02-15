@@ -146,9 +146,17 @@ export interface AuthenticatedRequest extends Request {
     userPayload?: AuthPayload;
 }
 
+/** Resolve auth payload from Bearer token (Supabase first, then legacy JWT). */
+async function resolveAuthPayload(token: string): Promise<AuthPayload | { sub: string; email?: string; user_metadata?: any } | null> {
+    const { verifySupabaseToken } = await import("./supabase");
+    const supabasePayload = await verifySupabaseToken(token);
+    if (supabasePayload?.sub) return supabasePayload as any;
+    return verifyToken(token);
+}
+
 /**
  * Express middleware: verifies Bearer token and attaches userId.
- * Returns 401 if token is missing or invalid.
+ * Accepts Supabase JWT or legacy stellaris JWT.
  */
 export async function requireAuth(
     req: AuthenticatedRequest,
@@ -162,14 +170,14 @@ export async function requireAuth(
     }
 
     const token = authHeader.slice(7);
-    const payload = await verifyToken(token);
+    const payload = await resolveAuthPayload(token);
     if (!payload || !payload.sub) {
         res.status(401).json({ error: "Invalid or expired token" });
         return;
     }
 
     req.userId = payload.sub;
-    req.userPayload = payload;
+    req.userPayload = payload as AuthPayload;
     next();
 }
 
@@ -184,10 +192,10 @@ export async function optionalAuth(
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
         const token = authHeader.slice(7);
-        const payload = await verifyToken(token);
+        const payload = await resolveAuthPayload(token);
         if (payload?.sub) {
             req.userId = payload.sub;
-            req.userPayload = payload;
+            req.userPayload = payload as AuthPayload;
         }
     }
     next();
