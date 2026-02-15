@@ -736,24 +736,43 @@ function getPreferredSide(planet: PlanetName, lineType: LineType): "west" | "eas
   return "both";
 }
 
-export function getSideOfLineInfo(planet: PlanetName, lineType: LineType): SideOfLineInfo {
+export function getSideOfLineInfo(planet: PlanetName, lineType: LineType, sentiment?: "positive" | "difficult" | "neutral"): SideOfLineInfo {
   const data = SIDE_DATA[lineType];
   const preferred = getPreferredSide(planet, lineType);
   const planetLabel = getPlanetSymbol(planet);
+  const isDifficult = sentiment === "difficult" || ["saturn", "pluto"].includes(planet) ||
+    (planet === "mars" && (lineType === "ASC" || lineType === "DSC" || lineType === "MC")) ||
+    (planet === "neptune" && (lineType === "ASC" || lineType === "IC"));
 
-  const summaryMap = {
-    west: `More beneficial on the western side of the line.`,
-    east: `Gentler on the eastern side of the line.`,
-    both: `Both sides offer value — depends on your goals.`,
-  };
+  let summary: string;
+  let westDesc: string;
+  let eastDesc: string;
+
+  if (isDifficult) {
+    summary = preferred === "east"
+      ? `Less challenging on the eastern side of the line.`
+      : preferred === "west"
+        ? `More intense on the western side of the line.`
+        : `Intensity varies by side — both have trade-offs.`;
+    westDesc = `West of the line, ${planetLabel} sits in your ${data.westHouse} — its challenging energy hits at full force through your ${data.westLabel}. Expect the difficulties to be more direct and unavoidable.`;
+    eastDesc = `East of the line, ${planetLabel} shifts to your ${data.eastHouse} — its intensity is softened through your ${data.eastLabel}. Challenges are still present but more manageable and internalized.`;
+  } else {
+    summary = preferred === "west"
+      ? `More beneficial on the western side of the line.`
+      : preferred === "east"
+        ? `Subtler on the eastern side of the line.`
+        : `Both sides offer value — depends on your goals.`;
+    westDesc = `West of the line, ${planetLabel} sits in your ${data.westHouse} — its energy directly shapes your ${data.westLabel}. The benefits are more visible and tangible.`;
+    eastDesc = `East of the line, ${planetLabel} shifts to your ${data.eastHouse} — its energy works through your ${data.eastLabel}. The benefits are subtler and more internalized.`;
+  }
 
   return {
     preferredSide: preferred,
-    summary: summaryMap[preferred],
+    summary,
     westHouse: data.westHouse,
     eastHouse: data.eastHouse,
-    westDesc: `West of the line, ${planetLabel} sits in your ${data.westHouse} — its energy directly shapes your ${data.westLabel}. The effects are more visible and tangible.`,
-    eastDesc: `East of the line, ${planetLabel} shifts to your ${data.eastHouse} — its energy works through your ${data.eastLabel}. The effects are subtler and more internalized.`,
+    westDesc,
+    eastDesc,
   };
 }
 
