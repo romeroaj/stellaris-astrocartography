@@ -23,11 +23,13 @@ import {
   calculateGST,
   generateAstroLines,
   findNearestLines,
+  SideOfLine,
 } from "@/lib/astronomy";
 import {
   getInterpretation,
   getPlanetSymbol,
   getPlanetIcon,
+  getSideOfLineInfo,
 } from "@/lib/interpretations";
 import {
   classifyLine,
@@ -73,6 +75,8 @@ interface CityLineInfo {
   influence: string;
   keywords: string[];
   sentiment: LineSentiment;
+  side: SideOfLine;
+  onPreferredSide: boolean;
 }
 
 interface CityAnalysis {
@@ -208,6 +212,8 @@ export default function InsightsScreen() {
 
       const lines: CityLineInfo[] = nearby.map((item) => {
         const cls = classifyLine(item.planet, item.lineType);
+        const sideInfo = getSideOfLineInfo(item.planet, item.lineType as LineType, cls.sentiment);
+        const onPreferred = item.side === "on" || item.side === sideInfo.preferredSide || sideInfo.preferredSide === "both";
         return {
           planet: item.planet,
           lineType: item.lineType,
@@ -215,6 +221,8 @@ export default function InsightsScreen() {
           influence: item.influence,
           keywords: cls.keywords,
           sentiment: cls.sentiment,
+          side: item.side,
+          onPreferredSide: onPreferred,
         };
       });
 
@@ -228,7 +236,19 @@ export default function InsightsScreen() {
       const diffProximity = lines
         .filter((l) => l.sentiment === "difficult")
         .reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0);
-      const score = positiveCount * 10 + posProximity * 5 - difficultCount * 8 - diffProximity * 4;
+
+      // East/west side bonus: preferred side boosts positive, softens difficult
+      const sideBonus = lines.reduce((acc, l) => {
+        if (l.sentiment === "positive") {
+          return acc + (l.onPreferredSide ? 3 : -1);
+        }
+        if (l.sentiment === "difficult") {
+          return acc + (l.onPreferredSide ? 2 : -2);
+        }
+        return acc;
+      }, 0);
+
+      const score = positiveCount * 10 + posProximity * 5 - difficultCount * 8 - diffProximity * 4 + sideBonus;
 
       results.push({ ...city, lines, positiveCount, difficultCount, neutralCount, score });
     }
@@ -360,6 +380,10 @@ export default function InsightsScreen() {
         <View style={styles.cityLines}>
           {relevantLines.slice(0, 3).map((line, j) => {
             const sentColor = SENTIMENT_COLORS[line.sentiment];
+            const sideLabel = line.side === "on" ? "On line" : line.side === "west" ? "W" : "E";
+            const sideColor = line.onPreferredSide
+              ? "#10B981"
+              : line.sentiment === "difficult" ? SENTIMENT_COLORS.difficult : Colors.dark.textMuted;
             return (
               <View key={`${line.planet}-${line.lineType}-${j}`} style={styles.cityLineItem}>
                 <SignalIcon distance={line.distance} color={sentColor} />
@@ -367,6 +391,9 @@ export default function InsightsScreen() {
                 <Text style={[styles.cityLineText, { color: sentColor }]}>
                   {getPlanetSymbol(line.planet)} {Colors.lineTypes[line.lineType]?.label}
                 </Text>
+                <View style={[styles.sidePill, { backgroundColor: sideColor + "18" }]}>
+                  <Text style={[styles.sidePillText, { color: sideColor }]}>{sideLabel}</Text>
+                </View>
                 <Text style={styles.cityLineDist}>{Math.round(line.distance)} km</Text>
               </View>
             );
@@ -780,6 +807,8 @@ const styles = StyleSheet.create({
   cityLines: { gap: 6, marginBottom: 10 },
   cityLineItem: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, paddingHorizontal: 10, backgroundColor: Colors.dark.surface, borderRadius: 10 },
   cityLineDot: { width: 6, height: 6, borderRadius: 3 },
+  sidePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  sidePillText: { fontSize: 10, fontFamily: "Outfit_700Bold" },
   cityLineText: { flex: 1, fontSize: 13, fontFamily: "Outfit_500Medium" },
   cityLineDist: { fontSize: 11, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted },
   cityFooter: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4 },

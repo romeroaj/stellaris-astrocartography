@@ -6,6 +6,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import Colors from "@/constants/colors";
+import { FriendViewProvider } from "@/lib/FriendViewContext";
 
 function NativeTabLayout() {
   return (
@@ -97,8 +98,6 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
+  const content = isLiquidGlassAvailable() ? <NativeTabLayout /> : <ClassicTabLayout />;
+  return <FriendViewProvider>{content}</FriendViewProvider>;
 }
