@@ -20,12 +20,14 @@ import {
   getSideOfLineInfo,
 } from "@/lib/interpretations";
 import { getActiveProfile } from "@/lib/storage";
+import { authFetch } from "@/lib/auth";
 import {
   calculatePlanetPositions,
   calculateGST,
   generateAstroLines,
 } from "@/lib/astronomy";
 import { CityWithDistance, findCitiesNearLine } from "@/lib/cities";
+import { classifyLine, SENTIMENT_COLORS } from "@/lib/lineClassification";
 import { useFocusEffect } from "expo-router";
 
 export default function LineDetailScreen() {
@@ -110,8 +112,15 @@ export default function LineDetailScreen() {
   const p = planet as PlanetName;
   const lt = lineType as LineType;
   const interp = getInterpretation(p, lt);
-  const sideInfo = getSideOfLineInfo(p, lt);
+  const cls = classifyLine(p, lt);
+  const sideInfo = getSideOfLineInfo(p, lt, cls.sentiment);
   const planetColor = Colors.planets[p] || "#FFFFFF";
+
+  const sideHeaderColor = cls.sentiment === "difficult"
+    ? SENTIMENT_COLORS.difficult
+    : cls.sentiment === "positive"
+      ? "#10B981"
+      : Colors.dark.primary;
 
   return (
     <View style={styles.container}>
@@ -225,16 +234,14 @@ export default function LineDetailScreen() {
         {/* East / West of the Line */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="compass-outline" size={18} color={Colors.dark.primary} />
+            <Ionicons name="compass-outline" size={18} color={sideHeaderColor} />
             <Text style={styles.sectionTitle}>East vs West of the Line</Text>
           </View>
           <View style={[styles.sideBadge, {
-            backgroundColor: sideInfo.preferredSide === "west" ? "#10B98118"
-              : sideInfo.preferredSide === "east" ? "#F59E0B18" : Colors.dark.surface,
+            backgroundColor: sideHeaderColor + "18",
           }]}>
             <Text style={[styles.sideBadgeText, {
-              color: sideInfo.preferredSide === "west" ? "#10B981"
-                : sideInfo.preferredSide === "east" ? "#F59E0B" : Colors.dark.text,
+              color: sideHeaderColor,
             }]}>{sideInfo.summary}</Text>
           </View>
           <View style={styles.sideRow}>
