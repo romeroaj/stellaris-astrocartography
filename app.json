@@ -30,15 +30,22 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "origin": "https://replit.com/"
-        }
-      ],
+      ["expo-router", { "origin": "https://replit.com/" }],
       "expo-font",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Stellaris to use your location to show you which planetary lines you are currently standing on."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Stellaris to find friends from your contacts."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
