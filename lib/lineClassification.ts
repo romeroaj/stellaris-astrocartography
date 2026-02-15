@@ -20,11 +20,11 @@ export interface LineClassification {
  * we also match interpretation text that contains any of these related terms.
  */
 const KEYWORD_ALIASES: Record<string, string[]> = {
-    love: ["love", "romance", "romantic", "partner", "partnership", "relationship", "marriage", "attraction", "intimacy", "heart"],
-    career: ["career", "work", "business", "profession", "job", "vocation", "success", "achievement", "ambition", "management"],
-    home: ["home", "family", "domestic", "roots", "foundation", "living", "household", "nurtur"],
-    creativity: ["creativ", "art", "music", "expression", "inspiration", "talent", "performance", "writing"],
-    luck: ["luck", "fortun", "abundan", "prosper", "wealth", "blessing", "opportunit"],
+    love: ["love", "romance", "romantic", "partner", "partnership", "relationship", "marriage", "attraction", "intimacy", "heart", "soulmate"],
+    money: ["money", "financ", "wealth", "income", "invest", "profit", "real estate", "property", "abundan", "prosper", "fortun", "luck", "salary", "commerce", "banking", "joint venture"],
+    career: ["career", "work", "business", "profession", "job", "vocation", "success", "achievement", "ambition", "management", "entrepreneur"],
+    home: ["home", "family", "domestic", "roots", "foundation", "living", "household", "nurtur", "property", "real estate"],
+    creativity: ["creativ", "art", "music", "expression", "inspiration", "talent", "performance", "writing", "design", "fashion"],
     spiritual: ["spiritual", "soul", "mystical", "meditation", "transcend", "divine", "intuition", "psychic", "wisdom"],
     travel: ["travel", "international", "abroad", "foreign", "migration", "exploration", "adventure"],
     healing: ["heal", "therap", "recovery", "transform", "renewal", "wellness", "health"],
@@ -56,11 +56,22 @@ export function classifyLine(planet: PlanetName, lineType: LineType): LineClassi
 }
 
 function getSentiment(planet: PlanetName, lineType: LineType): LineSentiment {
-    // Venus & Jupiter are universally positive
+    // Venus & Jupiter are benefic — positive on all lines
     if (planet === "venus" || planet === "jupiter") return "positive";
 
-    // Saturn & Pluto are universally difficult
-    if (planet === "saturn" || planet === "pluto") return "difficult";
+    // Saturn: disciplined but challenging — MC can bring lasting success (neutral),
+    // other lines lean difficult
+    if (planet === "saturn") {
+        if (lineType === "MC") return "neutral";
+        return "difficult";
+    }
+
+    // Pluto: transformative — MC/IC are intense but can be empowering (neutral),
+    // ASC/DSC involve power struggles (difficult)
+    if (planet === "pluto") {
+        if (lineType === "MC" || lineType === "IC") return "neutral";
+        return "difficult";
+    }
 
     // Sun: MC & ASC are power lines (positive); IC/DSC are neutral
     if (planet === "sun") {
@@ -86,7 +97,22 @@ function getSentiment(planet: PlanetName, lineType: LineType): LineSentiment {
         return "neutral";
     }
 
-    // Mercury & Uranus default neutral
+    // Chiron: wounded healer — mixed healing/wound energy
+    if (planet === "chiron") return "neutral";
+
+    // North Node: destiny and growth — positive
+    if (planet === "northnode") return "positive";
+
+    // South Node: karmic past — neutral (comfort + stagnation)
+    if (planet === "southnode") return "neutral";
+
+    // Lilith: shadow and liberation — neutral (empowering but intense)
+    if (planet === "lilith") return "neutral";
+
+    // Ceres: nurturing — neutral (nurture + grief)
+    if (planet === "ceres") return "neutral";
+
+    // Mercury, Uranus, Pallas, Juno, Vesta default neutral
     return "neutral";
 }
 

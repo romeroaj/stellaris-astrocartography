@@ -17,13 +17,92 @@ import {
   getInterpretation,
   getPlanetSymbol,
   getPlanetIcon,
+  getSideOfLineInfo,
 } from "@/lib/interpretations";
+import { getActiveProfile } from "@/lib/storage";
+import {
+  calculatePlanetPositions,
+  calculateGST,
+  generateAstroLines,
+} from "@/lib/astronomy";
+import { CityWithDistance, findCitiesNearLine } from "@/lib/cities";
+import { useFocusEffect } from "expo-router";
 
 export default function LineDetailScreen() {
-  const { planet, lineType } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     planet: string;
     lineType: string;
+    viewFriendId?: string;
+    viewFriendName?: string;
   }>();
+  const { planet, lineType, viewFriendId, viewFriendName } = params;
+
+  const [nearbyCities, setNearbyCities] = React.useState<CityWithDistance[]>([]);
+  const [loadingCities, setLoadingCities] = React.useState(true);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      calculateCities();
+    }, [planet, lineType, viewFriendId])
+  );
+
+  const calculateCities = async () => {
+    if (!planet || !lineType) {
+      setLoadingCities(false);
+      return;
+    }
+
+    setLoadingCities(true);
+    try {
+      let profile;
+      if (viewFriendId) {
+        const { fetchFriendProfile } = await import("@/lib/friendProfile");
+        const friendData = await fetchFriendProfile(viewFriendId, viewFriendName || undefined);
+        if (!friendData) {
+          setLoadingCities(false);
+          return;
+        }
+        profile = {
+          ...friendData,
+          name: viewFriendName || friendData.name || "Friend",
+        };
+      } else {
+        profile = await getActiveProfile();
+      }
+      if (!profile) {
+        setLoadingCities(false);
+        return;
+      }
+
+      // Calculate lines to get geometry (use correct profile: user or friend)
+      const [year, month, day] = profile.date.split("-").map(Number);
+      const [hour, minute] = profile.time.split(":").map(Number);
+      const positions = calculatePlanetPositions(
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        profile.longitude
+      );
+      const gst = calculateGST(year, month, day, hour, minute, profile.longitude);
+      const lines = generateAstroLines(positions, gst);
+
+      // Collect ALL segments for this planet+lineType (ASC/DSC split at dateline)
+      const matchingSegments = lines.filter(
+        (l) => l.planet === planet && l.lineType === lineType
+      );
+
+      if (matchingSegments.length > 0) {
+        const cities = findCitiesNearLine(matchingSegments, 400);
+        setNearbyCities(cities);
+      }
+    } catch (e) {
+      console.error("Error calculating cities:", e);
+    } finally {
+      setLoadingCities(false);
+    }
+  };
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
@@ -31,6 +110,7 @@ export default function LineDetailScreen() {
   const p = planet as PlanetName;
   const lt = lineType as LineType;
   const interp = getInterpretation(p, lt);
+  const sideInfo = getSideOfLineInfo(p, lt);
   const planetColor = Colors.planets[p] || "#FFFFFF";
 
   return (
@@ -64,10 +144,62 @@ export default function LineDetailScreen() {
               {getPlanetSymbol(p)} {Colors.lineTypes[lt]?.label || lt}
             </Text>
           </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.showOnMapBtn,
+              { borderColor: planetColor },
+              pressed && { backgroundColor: planetColor + "15" },
+            ]}
+            onPress={() => {
+              const p: Record<string, string> = { planet, lineType };
+              if (viewFriendId && viewFriendName) {
+                p.viewFriendId = viewFriendId;
+                p.viewFriendName = viewFriendName;
+              }
+              router.push({
+                pathname: "/(tabs)",
+                params: p,
+              });
+            }}
+          >
+            <Ionicons name="map-outline" size={16} color={planetColor} />
+            <Text style={[styles.showOnMapText, { color: planetColor }]}>
+              Show on Map
+            </Text>
+          </Pressable>
         </LinearGradient>
 
         <View style={styles.section}>
           <Text style={styles.sectionContent}>{interp.shortDesc}</Text>
+        </View>
+
+        {/* Major Cities Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="business-outline" size={18} color={Colors.dark.text} />
+            <Text style={styles.sectionTitle}>Major Cities Near This Line</Text>
+          </View>
+
+          {loadingCities ? (
+            <Text style={[styles.sectionContent, { fontStyle: 'italic', opacity: 0.7 }]}>
+              Calculating nearby cities...
+            </Text>
+          ) : nearbyCities.length > 0 ? (
+            <View style={styles.citiesGrid}>
+              {nearbyCities.map((city, i) => (
+                <View key={i} style={styles.cityChip}>
+                  <Ionicons name="location-sharp" size={12} color={Colors.dark.textMuted} />
+                  <Text style={styles.cityText}>{city.name}, {city.country}</Text>
+                  <Text style={styles.cityDist}>{Math.round(city.distance)} km</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={[styles.sectionContent, { fontStyle: 'italic', opacity: 0.7 }]}>
+              No major cities found within range of this line.
+            </Text>
+          )}
         </View>
 
         {interp.livingHere ? (
@@ -79,6 +211,45 @@ export default function LineDetailScreen() {
             <Text style={styles.sectionContent}>{interp.livingHere}</Text>
           </View>
         ) : null}
+
+        {interp.visitingHere ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="airplane-outline" size={18} color={Colors.dark.secondary} />
+              <Text style={styles.sectionTitle}>Visiting Here</Text>
+            </View>
+            <Text style={styles.sectionContent}>{interp.visitingHere}</Text>
+          </View>
+        ) : null}
+
+        {/* East / West of the Line */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="compass-outline" size={18} color={Colors.dark.primary} />
+            <Text style={styles.sectionTitle}>East vs West of the Line</Text>
+          </View>
+          <View style={[styles.sideBadge, {
+            backgroundColor: sideInfo.preferredSide === "west" ? "#10B98118"
+              : sideInfo.preferredSide === "east" ? "#F59E0B18" : Colors.dark.surface,
+          }]}>
+            <Text style={[styles.sideBadgeText, {
+              color: sideInfo.preferredSide === "west" ? "#10B981"
+                : sideInfo.preferredSide === "east" ? "#F59E0B" : Colors.dark.text,
+            }]}>{sideInfo.summary}</Text>
+          </View>
+          <View style={styles.sideRow}>
+            <View style={styles.sideCard}>
+              <Text style={styles.sideLabel}>← West</Text>
+              <Text style={styles.sideHouse}>{sideInfo.westHouse}</Text>
+              <Text style={styles.sideDesc}>{sideInfo.westDesc}</Text>
+            </View>
+            <View style={styles.sideCard}>
+              <Text style={styles.sideLabel}>East →</Text>
+              <Text style={styles.sideHouse}>{sideInfo.eastHouse}</Text>
+              <Text style={styles.sideDesc}>{sideInfo.eastDesc}</Text>
+            </View>
+          </View>
+        </View>
 
         {interp.themes.length > 0 && (
           <View style={styles.section}>
@@ -240,5 +411,86 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_400Regular",
     color: Colors.dark.textSecondary,
     lineHeight: 21,
+  },
+  sideBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
+  sideBadgeText: {
+    fontSize: 14,
+    fontFamily: "Outfit_600SemiBold",
+    textAlign: "center",
+  },
+  sideRow: {
+    gap: 10,
+  },
+  sideCard: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+  },
+  sideLabel: {
+    fontSize: 13,
+    fontFamily: "Outfit_700Bold",
+    color: Colors.dark.primary,
+    marginBottom: 4,
+  },
+  sideHouse: {
+    fontSize: 15,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.text,
+    marginBottom: 6,
+    textTransform: "capitalize" as const,
+  },
+  sideDesc: {
+    fontSize: 13,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textSecondary,
+    lineHeight: 19,
+  },
+  showOnMapBtn: {
+    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    backgroundColor: Colors.dark.surface,
+  },
+  showOnMapText: {
+    fontSize: 14,
+    fontFamily: "Outfit_600SemiBold",
+  },
+  citiesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  cityChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.dark.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+  },
+  cityText: {
+    fontSize: 13,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.text,
+  },
+  cityDist: {
+    fontSize: 11,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textMuted,
   },
 });

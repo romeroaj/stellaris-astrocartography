@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { BirthData, PlanetName, LineType } from "@/lib/types";
 import { getActiveProfile } from "@/lib/storage";
-import { authFetch } from "@/lib/auth";
 import {
   calculatePlanetPositions,
   calculateGST,
@@ -32,21 +31,74 @@ import {
 } from "@/lib/interpretations";
 import {
   classifyLine,
+  lineMatchesKeyword,
   SENTIMENT_COLORS,
-  SENTIMENT_LABELS,
   LineSentiment,
 } from "@/lib/lineClassification";
+import { WORLD_CITIES as CITY_LIST } from "@/lib/cities";
+import { getSettings } from "@/lib/storage";
+import { filterAstroLines } from "@/lib/settings";
+import { useFriendView } from "@/lib/FriendViewContext";
 
-const ALL_PLANETS: PlanetName[] = [
-  "sun", "moon", "mercury", "venus", "mars",
-  "jupiter", "saturn", "uranus", "neptune", "pluto",
+const KEYWORD_TAGS = [
+  "love", "money", "career", "home", "creativity",
+  "spiritual", "travel", "healing", "leadership", "partnerships",
 ];
+
+// ── Signal strength bars (small) ──────────────────────────────────
+function SignalIcon({ distance, color }: { distance: number; color: string }) {
+  const bars = distance < 150 ? 4 : distance < 400 ? 3 : distance < 800 ? 2 : 1;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 1.5, height: 14 }}>
+      {[1, 2, 3, 4].map((level) => (
+        <View
+          key={level}
+          style={{
+            width: 3.5,
+            height: 3 + level * 3,
+            borderRadius: 1.5,
+            backgroundColor: level <= bars ? color : Colors.dark.textMuted + "40",
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+// ── Types ────────────────────────────────────────────────────────
+interface CityLineInfo {
+  planet: PlanetName;
+  lineType: string;
+  distance: number;
+  influence: string;
+  keywords: string[];
+  sentiment: LineSentiment;
+}
+
+interface CityAnalysis {
+  name: string;
+  country: string;
+  lat: number;
+  lon: number;
+  lines: CityLineInfo[];
+  positiveCount: number;
+  difficultCount: number;
+  neutralCount: number;
+  score: number;
+}
+
+type ActiveTab = "summary" | "best" | "avoid";
 
 export default function InsightsScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const [profile, setProfile] = useState<BirthData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("summary");
+  const [keywordFilter, setKeywordFilter] = useState("");
+  const [includeMinorPlanets, setIncludeMinorPlanets] = useState(true);
+
+  // Explore tab search
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchLocation, setSearchLocation] = useState<{
@@ -54,39 +106,42 @@ export default function InsightsScreen() {
     lat: number;
     lon: number;
   } | null>(null);
-  const [activeTab, setActiveTab] = useState<"great" | "explore">("great");
-  const [keywordFilter, setKeywordFilter] = useState("");
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const friendIdParam = Array.isArray(params.viewFriendId) ? params.viewFriendId[0] : params.viewFriendId;
   const friendNameParam = Array.isArray(params.viewFriendName) ? params.viewFriendName[0] : params.viewFriendName;
-  const isFriendView = typeof friendIdParam === "string" && friendIdParam.length > 0;
+  const { viewFriendId: ctxFriendId, viewFriendName: ctxFriendName, setFriendView, clearFriendView } = useFriendView();
+  const effectiveFriendId = (typeof friendIdParam === "string" && friendIdParam) ? friendIdParam : ctxFriendId;
+  const effectiveFriendName = (typeof friendNameParam === "string" && friendNameParam) ? friendNameParam : ctxFriendName;
+  const isFriendView = typeof effectiveFriendId === "string" && effectiveFriendId.length > 0;
+
+  useEffect(() => {
+    if (friendIdParam && friendNameParam) {
+      setFriendView(friendIdParam, friendNameParam);
+    }
+  }, [friendIdParam, friendNameParam, setFriendView]);
 
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-    }, [friendIdParam, friendNameParam])
+      getSettings().then((s) => setIncludeMinorPlanets(s.includeMinorPlanets));
+    }, [effectiveFriendId, effectiveFriendName])
   );
 
   const loadProfile = async () => {
     setLoading(true);
-    if (friendIdParam) {
-      const res = await authFetch<{ profile: any }>("GET", `/api/friends/${friendIdParam}/profile`);
-      if (res.data?.profile) {
-        const fp = res.data.profile;
+    if (effectiveFriendId) {
+      const { fetchFriendProfile } = await import("@/lib/friendProfile");
+      const friendData = await fetchFriendProfile(effectiveFriendId, effectiveFriendName || undefined);
+      if (friendData) {
         setProfile({
-          id: `friend_${fp.id}`,
-          name: friendNameParam || fp.name || "Friend",
-          date: fp.birthDate,
-          time: fp.birthTime,
-          latitude: fp.latitude,
-          longitude: fp.longitude,
-          locationName: fp.locationName,
-          createdAt: Date.now(),
+          ...friendData,
+          name: effectiveFriendName || friendData.name || "Friend",
         });
       } else {
-        Alert.alert("Friend View Unavailable", res.error || "Could not load your friend's insights.");
-        router.replace("/(tabs)/insights");
+        Alert.alert("Friend View Unavailable", "Could not load your friend's insights.");
+        clearFriendView();
+        router.replace({ pathname: "/(tabs)/insights", params: {} });
       }
       setLoading(false);
       return;
@@ -102,9 +157,11 @@ export default function InsightsScreen() {
     const [hour, minute] = profile.time.split(":").map(Number);
     const positions = calculatePlanetPositions(year, month, day, hour, minute, profile.longitude);
     const gst = calculateGST(year, month, day, hour, minute, profile.longitude);
-    return generateAstroLines(positions, gst);
-  }, [profile]);
+    const raw = generateAstroLines(positions, gst);
+    return filterAstroLines(raw, includeMinorPlanets);
+  }, [profile, includeMinorPlanets]);
 
+  // ── City search ──
   const nearbyLines = useMemo(() => {
     if (!searchLocation || astroLines.length === 0) return [];
     return findNearestLines(astroLines, searchLocation.lat, searchLocation.lon, 20);
@@ -115,9 +172,7 @@ export default function InsightsScreen() {
     setSearching(true);
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-          searchQuery
-        )}&format=json&limit=1`,
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchQuery)}&format=json&limit=1`,
         { headers: { "User-Agent": "StellarisMobileApp/1.0" } }
       );
       const data = await response.json();
@@ -138,106 +193,213 @@ export default function InsightsScreen() {
     }
   };
 
-  const getInfluenceColor = (influence: string): string => {
-    switch (influence) {
-      case "very strong": return Colors.dark.primary;
-      case "strong": return Colors.dark.secondary;
-      case "moderate": return "#43D9AD";
-      default: return Colors.dark.textMuted;
-    }
-  };
+  // ── City analysis ──
+  const WORLD_CITIES = useMemo(() =>
+    CITY_LIST.map((c) => ({ name: c.name, country: c.country, lat: c.latitude, lon: c.longitude })),
+  []);
 
-  // ── Great Places computation ────────────────────────────────────
-  const WORLD_CITIES = useMemo(() => [
-    { name: "New York", country: "USA", lat: 40.7128, lon: -74.006 },
-    { name: "Los Angeles", country: "USA", lat: 34.0522, lon: -118.2437 },
-    { name: "London", country: "UK", lat: 51.5074, lon: -0.1278 },
-    { name: "Paris", country: "France", lat: 48.8566, lon: 2.3522 },
-    { name: "Tokyo", country: "Japan", lat: 35.6762, lon: 139.6503 },
-    { name: "Sydney", country: "Australia", lat: -33.8688, lon: 151.2093 },
-    { name: "Bali", country: "Indonesia", lat: -8.3405, lon: 115.092 },
-    { name: "Barcelona", country: "Spain", lat: 41.3851, lon: 2.1734 },
-    { name: "Rome", country: "Italy", lat: 41.9028, lon: 12.4964 },
-    { name: "Berlin", country: "Germany", lat: 52.52, lon: 13.405 },
-    { name: "Dubai", country: "UAE", lat: 25.2048, lon: 55.2708 },
-    { name: "Bangkok", country: "Thailand", lat: 13.7563, lon: 100.5018 },
-    { name: "Mexico City", country: "Mexico", lat: 19.4326, lon: -99.1332 },
-    { name: "Buenos Aires", country: "Argentina", lat: -34.6037, lon: -58.3816 },
-    { name: "Cape Town", country: "South Africa", lat: -33.9249, lon: 18.4241 },
-    { name: "Mumbai", country: "India", lat: 19.076, lon: 72.8777 },
-    { name: "Lisbon", country: "Portugal", lat: 38.7223, lon: -9.1393 },
-    { name: "Amsterdam", country: "Netherlands", lat: 52.3676, lon: 4.9041 },
-    { name: "Seoul", country: "South Korea", lat: 37.5665, lon: 126.978 },
-    { name: "Istanbul", country: "Turkey", lat: 41.0082, lon: 28.9784 },
-    { name: "Cairo", country: "Egypt", lat: 30.0444, lon: 31.2357 },
-    { name: "Rio de Janeiro", country: "Brazil", lat: -22.9068, lon: -43.1729 },
-    { name: "Vancouver", country: "Canada", lat: 49.2827, lon: -123.1207 },
-    { name: "Honolulu", country: "USA", lat: 21.3069, lon: -157.8583 },
-    { name: "Reykjavik", country: "Iceland", lat: 64.1466, lon: -21.9426 },
-    { name: "Marrakech", country: "Morocco", lat: 31.6295, lon: -7.9811 },
-    { name: "Athens", country: "Greece", lat: 37.9838, lon: 23.7275 },
-    { name: "Singapore", country: "Singapore", lat: 1.3521, lon: 103.8198 },
-    { name: "San Francisco", country: "USA", lat: 37.7749, lon: -122.4194 },
-    { name: "Miami", country: "USA", lat: 25.7617, lon: -80.1918 },
-  ], []);
-
-  interface GreatPlace {
-    name: string;
-    country: string;
-    lat: number;
-    lon: number;
-    positiveLines: { planet: PlanetName; lineType: string; distance: number; keywords: string[]; sentiment: LineSentiment }[];
-    score: number;
-  }
-
-  const greatPlaces = useMemo((): GreatPlace[] => {
+  const allCityAnalyses = useMemo((): CityAnalysis[] => {
     if (astroLines.length === 0) return [];
-
-    const results: GreatPlace[] = [];
+    const results: CityAnalysis[] = [];
 
     for (const city of WORLD_CITIES) {
       const nearby = findNearestLines(astroLines, city.lat, city.lon, 15);
-      const positiveLines: GreatPlace["positiveLines"] = [];
+      if (nearby.length === 0) continue;
 
-      for (const item of nearby) {
+      const lines: CityLineInfo[] = nearby.map((item) => {
         const cls = classifyLine(item.planet, item.lineType);
-        positiveLines.push({
+        return {
           planet: item.planet,
           lineType: item.lineType,
           distance: item.distance,
+          influence: item.influence,
           keywords: cls.keywords,
           sentiment: cls.sentiment,
-        });
-      }
+        };
+      });
 
-      // Score: heavily weight positive lines, slightly penalize difficult
-      const posCount = positiveLines.filter((l) => l.sentiment === "positive").length;
-      const proximity = positiveLines
+      const positiveCount = lines.filter((l) => l.sentiment === "positive").length;
+      const difficultCount = lines.filter((l) => l.sentiment === "difficult").length;
+      const neutralCount = lines.filter((l) => l.sentiment === "neutral").length;
+
+      const posProximity = lines
         .filter((l) => l.sentiment === "positive")
         .reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0);
-      const score = posCount * 10 + proximity * 5;
+      const diffProximity = lines
+        .filter((l) => l.sentiment === "difficult")
+        .reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0);
+      const score = positiveCount * 10 + posProximity * 5 - difficultCount * 8 - diffProximity * 4;
 
-      if (posCount > 0) {
-        results.push({
-          ...city,
-          positiveLines,
-          score,
-        });
-      }
+      results.push({ ...city, lines, positiveCount, difficultCount, neutralCount, score });
     }
-
-    return results.sort((a, b) => b.score - a.score);
+    return results;
   }, [astroLines, WORLD_CITIES]);
 
-  const filteredGreatPlaces = useMemo(() => {
-    if (!keywordFilter.trim()) return greatPlaces;
-    const term = keywordFilter.toLowerCase().trim();
-    return greatPlaces.filter((place) =>
-      place.positiveLines.some((line) =>
-        line.keywords.some((kw) => kw.includes(term))
-      )
+  // ── Summary stats ──
+  const summaryStats = useMemo(() => {
+    const totalPositive = allCityAnalyses.reduce((a, c) => a + c.positiveCount, 0);
+    const totalDifficult = allCityAnalyses.reduce((a, c) => a + c.difficultCount, 0);
+    const totalNeutral = allCityAnalyses.reduce((a, c) => a + c.neutralCount, 0);
+    const citiesWithPositive = allCityAnalyses.filter((c) => c.positiveCount > 0).length;
+    const citiesWithDifficult = allCityAnalyses.filter((c) => c.difficultCount > 0).length;
+
+    // Theme breakdown across all positive lines
+    const themeMap: Record<string, number> = {};
+    for (const city of allCityAnalyses) {
+      for (const line of city.lines) {
+        if (line.sentiment === "positive") {
+          for (const kw of KEYWORD_TAGS) {
+            if (line.keywords.some((k) => k.includes(kw))) {
+              themeMap[kw] = (themeMap[kw] || 0) + 1;
+            }
+          }
+        }
+      }
+    }
+    const topPositiveThemes = Object.entries(themeMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+
+    // Top cities
+    const sortedBest = [...allCityAnalyses].filter((c) => c.positiveCount > 0).sort((a, b) => b.score - a.score);
+    const sortedWorst = [...allCityAnalyses].filter((c) => c.difficultCount > 0).sort((a, b) => {
+      const aS = a.lines.filter((l) => l.sentiment === "difficult").reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0) * a.difficultCount;
+      const bS = b.lines.filter((l) => l.sentiment === "difficult").reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0) * b.difficultCount;
+      return bS - aS;
+    });
+
+    return {
+      totalPositive, totalDifficult, totalNeutral,
+      citiesWithPositive, citiesWithDifficult,
+      topPositiveThemes,
+      topBest: sortedBest.slice(0, 3),
+      topAvoid: sortedWorst.slice(0, 3),
+    };
+  }, [allCityAnalyses]);
+
+  // ── Filtered lists ──
+  const bestPlaces = useMemo(() => {
+    let places = allCityAnalyses.filter((c) => c.positiveCount > 0);
+    if (keywordFilter.trim()) {
+      const term = keywordFilter.toLowerCase().trim();
+      places = places
+        .map((place) => {
+          const matchingLines = place.lines.filter((l) =>
+            l.keywords.some((kw) => kw.includes(term))
+          );
+          const kwScore = matchingLines.reduce((acc, l) => {
+            const w = l.sentiment === "positive" ? 10 : l.sentiment === "neutral" ? 4 : -5;
+            return acc + w + Math.max(0, 1 - l.distance / 1500) * 5;
+          }, 0);
+          return { ...place, score: kwScore };
+        })
+        .filter((p) => p.score > 0);
+    }
+    return places.sort((a, b) => b.score - a.score);
+  }, [allCityAnalyses, keywordFilter]);
+
+  const avoidPlaces = useMemo(() => {
+    let places = allCityAnalyses.filter((c) => c.difficultCount > 0);
+    if (keywordFilter.trim()) {
+      const term = keywordFilter.toLowerCase().trim();
+      places = places.filter((c) =>
+        c.lines.some((l) => l.sentiment === "difficult" && l.keywords.some((kw) => kw.includes(term)))
+      );
+    }
+    return places.sort((a, b) => {
+      const aS = a.lines.filter((l) => l.sentiment === "difficult").reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0) * a.difficultCount;
+      const bS = b.lines.filter((l) => l.sentiment === "difficult").reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0) * b.difficultCount;
+      return bS - aS;
+    });
+  }, [allCityAnalyses, keywordFilter]);
+
+  // ── Navigation to city detail ──
+  const openCity = (city: CityAnalysis) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push({
+      pathname: "/city-detail",
+      params: { name: city.name, country: city.country, lat: String(city.lat), lon: String(city.lon) },
+    });
+  };
+
+  // ── Render: City card for list views ──
+  const renderCityCard = (place: CityAnalysis, index: number, mode: "best" | "avoid") => {
+    const relevantLines = mode === "avoid"
+      ? place.lines.filter((l) => l.sentiment === "difficult")
+      : keywordFilter.trim()
+        ? place.lines.filter((l) => l.keywords.some((kw) => kw.includes(keywordFilter.toLowerCase().trim())))
+        : place.lines.filter((l) => l.sentiment === "positive");
+
+    return (
+      <Pressable
+        key={`${place.name}-${index}`}
+        style={({ pressed }) => [styles.cityCard, pressed && { opacity: 0.85 }]}
+        onPress={() => openCity(place)}
+      >
+        <View style={styles.cityCardHeader}>
+          <View style={styles.cityRank}>
+            <Text style={styles.cityRankText}>#{index + 1}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cityName}>{place.name}</Text>
+            <Text style={styles.cityCountry}>{place.country}</Text>
+          </View>
+          <View style={styles.cityBadges}>
+            {place.positiveCount > 0 && (
+              <View style={[styles.miniBadge, { backgroundColor: SENTIMENT_COLORS.positive + "20" }]}>
+                <Text style={[styles.miniBadgeText, { color: SENTIMENT_COLORS.positive }]}>{place.positiveCount}+</Text>
+              </View>
+            )}
+            {place.difficultCount > 0 && (
+              <View style={[styles.miniBadge, { backgroundColor: SENTIMENT_COLORS.difficult + "20" }]}>
+                <Text style={[styles.miniBadgeText, { color: SENTIMENT_COLORS.difficult }]}>{place.difficultCount}!</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        <View style={styles.cityLines}>
+          {relevantLines.slice(0, 3).map((line, j) => {
+            const sentColor = SENTIMENT_COLORS[line.sentiment];
+            return (
+              <View key={`${line.planet}-${line.lineType}-${j}`} style={styles.cityLineItem}>
+                <SignalIcon distance={line.distance} color={sentColor} />
+                <View style={[styles.cityLineDot, { backgroundColor: sentColor }]} />
+                <Text style={[styles.cityLineText, { color: sentColor }]}>
+                  {getPlanetSymbol(line.planet)} {Colors.lineTypes[line.lineType]?.label}
+                </Text>
+                <Text style={styles.cityLineDist}>{Math.round(line.distance)} km</Text>
+              </View>
+            );
+          })}
+        </View>
+        <View style={styles.cityFooter}>
+          <Text style={styles.cityFooterText}>Tap for full breakdown</Text>
+          <Ionicons name="chevron-forward" size={14} color={Colors.dark.textMuted} />
+        </View>
+      </Pressable>
     );
-  }, [greatPlaces, keywordFilter]);
+  };
+
+  // ── Render: Summary mini city row ──
+  const renderMiniCity = (place: CityAnalysis, mode: "best" | "avoid") => {
+    const sentColor = mode === "best" ? SENTIMENT_COLORS.positive : SENTIMENT_COLORS.difficult;
+    const count = mode === "best" ? place.positiveCount : place.difficultCount;
+    return (
+      <Pressable
+        key={place.name}
+        style={({ pressed }) => [styles.miniCityRow, pressed && { opacity: 0.7 }]}
+        onPress={() => openCity(place)}
+      >
+        <Text style={styles.miniCityName}>{place.name}, {place.country}</Text>
+        <View style={[styles.miniCityBadge, { backgroundColor: sentColor + "20" }]}>
+          <Text style={[styles.miniCityBadgeText, { color: sentColor }]}>
+            {count} {mode === "best" ? "positive" : "difficult"}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={14} color={Colors.dark.textMuted} />
+      </Pressable>
+    );
+  };
 
   if (loading) {
     return (
@@ -259,318 +421,278 @@ export default function InsightsScreen() {
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
         {isFriendView && (
-          <View style={styles.friendViewBanner}>
-            <Text style={styles.friendViewText}>
-              Viewing {friendNameParam || profile.name}'s insights
+          <View style={styles.friendBanner}>
+            <Text style={styles.friendBannerText}>
+              Viewing {effectiveFriendName || profile.name}'s insights
             </Text>
             <Pressable
-              style={({ pressed }) => [styles.friendViewClose, pressed && { opacity: 0.7 }]}
-              onPress={() => router.replace("/(tabs)/insights")}
+              style={styles.friendBannerClose}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                clearFriendView();
+                router.replace({ pathname: "/(tabs)/insights", params: {} });
+              }}
             >
               <Ionicons name="close" size={16} color={Colors.dark.primary} />
-              <Text style={styles.friendViewCloseText}>Back to Mine</Text>
+              <Text style={styles.friendBannerCloseText}>Back to Mine</Text>
             </Pressable>
           </View>
         )}
         <Text style={styles.screenTitle}>Insights</Text>
         <View style={styles.tabRow}>
-          <Pressable
-            style={[styles.tab, activeTab === "great" && styles.tabActive]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setActiveTab("great");
-            }}
-          >
-            <Text style={[styles.tabText, activeTab === "great" && styles.tabTextActive]}>
-              Great Places
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tab, activeTab === "explore" && styles.tabActive]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setActiveTab("explore");
-            }}
-          >
-            <Text style={[styles.tabText, activeTab === "explore" && styles.tabTextActive]}>
-              Explore
-            </Text>
-          </Pressable>
+          {(["summary", "best", "avoid"] as ActiveTab[]).map((tab) => (
+            <Pressable
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setActiveTab(tab);
+              }}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab === "summary" ? "Summary" : tab === "best" ? "Best Places" : "Avoid"}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       </View>
 
-      {activeTab === "great" ? (
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.contentInner}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.exploreDesc}>
-            Discover the best places in the world for you based on your positive planetary lines.
-          </Text>
+      {/* ── SUMMARY TAB ── */}
+      {activeTab === "summary" && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}>
+          {/* Stats overview */}
+          <LinearGradient
+            colors={[Colors.dark.primary + "12", Colors.dark.background]}
+            style={styles.overviewCard}
+          >
+            <Text style={styles.overviewTitle}>Your Astro Profile</Text>
+            <Text style={styles.overviewSubtitle}>
+              Across {allCityAnalyses.length} major cities worldwide
+            </Text>
 
-          <View style={styles.searchRow}>
-            <TextInput
-              style={styles.searchInput}
-              value={keywordFilter}
-              onChangeText={setKeywordFilter}
-              placeholder="Filter by keyword (love, career, home...)"
-              placeholderTextColor={Colors.dark.textMuted}
-              returnKeyType="search"
-            />
-            {keywordFilter.length > 0 && (
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <Text style={[styles.statNumber, { color: SENTIMENT_COLORS.positive }]}>
+                  {summaryStats.totalPositive}
+                </Text>
+                <Text style={styles.statLabel}>Beneficial Lines</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <Text style={[styles.statNumber, { color: SENTIMENT_COLORS.difficult }]}>
+                  {summaryStats.totalDifficult}
+                </Text>
+                <Text style={styles.statLabel}>Challenging Lines</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statBox}>
+                <Text style={[styles.statNumber, { color: SENTIMENT_COLORS.neutral }]}>
+                  {summaryStats.totalNeutral}
+                </Text>
+                <Text style={styles.statLabel}>Neutral Lines</Text>
+              </View>
+            </View>
+
+            <View style={styles.cityCounts}>
+              <View style={styles.cityCountRow}>
+                <Ionicons name="checkmark-circle" size={16} color={SENTIMENT_COLORS.positive} />
+                <Text style={styles.cityCountText}>
+                  <Text style={{ color: SENTIMENT_COLORS.positive, fontFamily: "Outfit_700Bold" }}>
+                    {summaryStats.citiesWithPositive}
+                  </Text> cities have positive energy for you
+                </Text>
+              </View>
+              <View style={styles.cityCountRow}>
+                <Ionicons name="warning" size={16} color={SENTIMENT_COLORS.difficult} />
+                <Text style={styles.cityCountText}>
+                  <Text style={{ color: SENTIMENT_COLORS.difficult, fontFamily: "Outfit_700Bold" }}>
+                    {summaryStats.citiesWithDifficult}
+                  </Text> cities have challenging energy
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
+
+          {/* Search a city */}
+          <View style={styles.summarySection}>
+            <Text style={styles.sectionTitle}>Explore a City</Text>
+            <Text style={styles.sectionDesc}>Search any city to see your full cosmic breakdown there.</Text>
+            <View style={styles.searchRow}>
+              <TextInput
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search a city..."
+                placeholderTextColor={Colors.dark.textMuted}
+                returnKeyType="search"
+                onSubmitEditing={handleSearch}
+              />
+              <Pressable style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.7 }]} onPress={handleSearch}>
+                {searching ? (
+                  <ActivityIndicator size="small" color={Colors.dark.background} />
+                ) : (
+                  <Ionicons name="search" size={20} color={Colors.dark.background} />
+                )}
+              </Pressable>
+            </View>
+            {searchLocation && (
               <Pressable
-                style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.7 }]}
-                onPress={() => setKeywordFilter("")}
+                style={styles.searchResult}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  router.push({
+                    pathname: "/city-detail",
+                    params: {
+                      name: searchLocation.name,
+                      country: "",
+                      lat: String(searchLocation.lat),
+                      lon: String(searchLocation.lon),
+                    },
+                  });
+                }}
               >
-                <Ionicons name="close" size={20} color={Colors.dark.background} />
+                <Ionicons name="location" size={18} color={Colors.dark.primary} />
+                <Text style={styles.searchResultText}>{searchLocation.name}</Text>
+                <Text style={styles.searchResultCta}>View breakdown →</Text>
               </Pressable>
             )}
           </View>
 
-          {/* Keyword suggestion chips */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.keywordChipRow}
-            contentContainerStyle={{ gap: 8, paddingBottom: 16 }}
-          >
-            {["love", "career", "home", "creativity", "luck", "spiritual", "travel", "healing"].map((kw) => (
+          {/* Top 3 best */}
+          {summaryStats.topBest.length > 0 && (
+            <View style={styles.summarySection}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="heart" size={18} color={SENTIMENT_COLORS.positive} />
+                <Text style={[styles.sectionTitle, { flex: 1 }]}>Top Cities For You</Text>
+                <Pressable onPress={() => { setActiveTab("best"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                  <Text style={styles.seeAllText}>See all →</Text>
+                </Pressable>
+              </View>
+              {summaryStats.topBest.map((c) => renderMiniCity(c, "best"))}
+            </View>
+          )}
+
+          {/* Top 3 avoid */}
+          {summaryStats.topAvoid.length > 0 && (
+            <View style={styles.summarySection}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="shield" size={18} color={SENTIMENT_COLORS.difficult} />
+                <Text style={[styles.sectionTitle, { flex: 1 }]}>Cities to Be Careful</Text>
+                <Pressable onPress={() => { setActiveTab("avoid"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
+                  <Text style={styles.seeAllText}>See all →</Text>
+                </Pressable>
+              </View>
+              {summaryStats.topAvoid.map((c) => renderMiniCity(c, "avoid"))}
+            </View>
+          )}
+
+          {/* Strongest themes */}
+          {summaryStats.topPositiveThemes.length > 0 && (
+            <View style={styles.summarySection}>
+              <Text style={styles.sectionTitle}>Your Strongest Themes</Text>
+              <Text style={styles.sectionDesc}>
+                The themes that come up most across your beneficial planetary lines.
+              </Text>
+              <View style={styles.themesList}>
+                {summaryStats.topPositiveThemes.map(([theme, count]) => (
+                  <Pressable
+                    key={theme}
+                    style={styles.themeRow}
+                    onPress={() => {
+                      setKeywordFilter(theme);
+                      setActiveTab("best");
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <View style={styles.themeIcon}>
+                      <Text style={styles.themeEmoji}>
+                        {theme === "love" ? "💕" : theme === "money" ? "💰" : theme === "career" ? "🚀" : theme === "home" ? "🏡"
+                          : theme === "creativity" ? "🎨" : theme === "spiritual" ? "🔮"
+                          : theme === "travel" ? "✈️" : theme === "healing" ? "💚" : theme === "leadership" ? "👑"
+                          : "🤝"}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.themeRowTitle}>{theme}</Text>
+                      <Text style={styles.themeRowCount}>{count} beneficial lines across cities</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.dark.textMuted} />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <View style={{ height: 120 }} />
+        </ScrollView>
+      )}
+
+      {/* ── BEST PLACES TAB ── */}
+      {activeTab === "best" && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}>
+          <Text style={styles.tabDesc}>
+            Cities ranked by your strongest positive planetary energies.
+            {keywordFilter ? ` Filtered for "${keywordFilter}".` : " Tap a keyword to focus."}
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+            {KEYWORD_TAGS.map((kw) => (
               <Pressable
                 key={kw}
-                style={[
-                  styles.keywordChip,
-                  keywordFilter.toLowerCase() === kw && styles.keywordChipActive,
-                ]}
+                style={[styles.chip, keywordFilter.toLowerCase() === kw && styles.chipActive]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setKeywordFilter(keywordFilter.toLowerCase() === kw ? "" : kw);
                 }}
               >
-                <Text
-                  style={[
-                    styles.keywordChipText,
-                    keywordFilter.toLowerCase() === kw && styles.keywordChipTextActive,
-                  ]}
-                >
-                  {kw}
-                </Text>
+                <Text style={[styles.chipText, keywordFilter.toLowerCase() === kw && styles.chipTextActive]}>{kw}</Text>
               </Pressable>
             ))}
           </ScrollView>
-
-          {filteredGreatPlaces.length > 0 ? (
-            <View style={styles.analysisContainer}>
-              {filteredGreatPlaces.map((place, i) => {
-                const posLines = place.positiveLines.filter((l) => l.sentiment === "positive");
-                const relevantLines = keywordFilter.trim()
-                  ? place.positiveLines.filter((l) =>
-                    l.keywords.some((kw) => kw.includes(keywordFilter.toLowerCase().trim()))
-                  )
-                  : posLines;
-                return (
-                  <View key={`${place.name}-${i}`} style={styles.greatPlaceCard}>
-                    <View style={styles.greatPlaceHeader}>
-                      <View style={styles.greatPlaceRank}>
-                        <Text style={styles.greatPlaceRankText}>#{i + 1}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.greatPlaceName}>{place.name}</Text>
-                        <Text style={styles.greatPlaceCountry}>{place.country}</Text>
-                      </View>
-                      <View style={styles.greatPlaceBadge}>
-                        <Ionicons name="star" size={12} color={Colors.dark.primary} />
-                        <Text style={styles.greatPlaceBadgeText}>
-                          {posLines.length} positive
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.greatPlaceLines}>
-                      {relevantLines.slice(0, 4).map((line, j) => (
-                        <Pressable
-                          key={`${line.planet}-${line.lineType}-${j}`}
-                          style={({ pressed }) => [
-                            styles.greatPlaceLineItem,
-                            pressed && { opacity: 0.7 },
-                          ]}
-                          onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            router.push({
-                              pathname: "/line-detail",
-                              params: { planet: line.planet, lineType: line.lineType },
-                            });
-                          }}
-                        >
-                          <View
-                            style={[
-                              styles.greatPlaceLineDot,
-                              { backgroundColor: SENTIMENT_COLORS[line.sentiment] },
-                            ]}
-                          />
-                          <Text style={styles.greatPlaceLineText}>
-                            {getPlanetSymbol(line.planet)} {Colors.lineTypes[line.lineType]?.label}
-                          </Text>
-                          <Text style={styles.greatPlaceLineDist}>
-                            {Math.round(line.distance)} km
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                    {relevantLines.length > 0 && (
-                      <View style={styles.greatPlaceThemes}>
-                        {relevantLines
-                          .flatMap((l) => l.keywords.slice(0, 3))
-                          .filter((v, i, a) => a.indexOf(v) === i)
-                          .slice(0, 5)
-                          .map((theme) => (
-                            <View key={theme} style={styles.themeBadge}>
-                              <Text style={styles.themeBadgeText}>{theme}</Text>
-                            </View>
-                          ))}
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
+          {bestPlaces.length > 0 ? (
+            <View style={styles.cityList}>
+              {bestPlaces.map((p, i) => renderCityCard(p, i, "best"))}
             </View>
           ) : (
             <View style={styles.noResults}>
               <Ionicons name="telescope-outline" size={32} color={Colors.dark.textMuted} />
               <Text style={styles.noResultsText}>
-                {keywordFilter
-                  ? `No great places found for "${keywordFilter}"`
-                  : "No great places found"}
+                {keywordFilter ? `No places found for "${keywordFilter}"` : "No positive places found"}
               </Text>
             </View>
           )}
           <View style={{ height: 120 }} />
         </ScrollView>
-      ) : (
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.contentInner}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.exploreDesc}>
-            Search any city to discover which planetary energies are strongest
-            there for you.
+      )}
+
+      {/* ── AVOID TAB ── */}
+      {activeTab === "avoid" && (
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}>
+          <Text style={styles.tabDesc}>
+            Cities where challenging planetary energies are strongest.
+            Not necessarily bad — just be aware of what you might face.
           </Text>
-          <View style={styles.searchRow}>
-            <TextInput
-              style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search a city..."
-              placeholderTextColor={Colors.dark.textMuted}
-              returnKeyType="search"
-              onSubmitEditing={handleSearch}
-            />
-            <Pressable
-              style={({ pressed }) => [styles.searchBtn, pressed && { opacity: 0.7 }]}
-              onPress={handleSearch}
-            >
-              {searching ? (
-                <ActivityIndicator size="small" color={Colors.dark.background} />
-              ) : (
-                <Ionicons name="search" size={20} color={Colors.dark.background} />
-              )}
-            </Pressable>
-          </View>
-
-          {searchLocation && (
-            <View style={styles.locationResult}>
-              <LinearGradient
-                colors={[Colors.dark.card, Colors.dark.surface]}
-                style={styles.locationCard}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow} contentContainerStyle={{ gap: 8, paddingBottom: 12 }}>
+            {KEYWORD_TAGS.map((kw) => (
+              <Pressable
+                key={kw}
+                style={[styles.chip, keywordFilter.toLowerCase() === kw && styles.chipActive]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setKeywordFilter(keywordFilter.toLowerCase() === kw ? "" : kw);
+                }}
               >
-                <View style={styles.locationHeader}>
-                  <Ionicons name="location" size={20} color={Colors.dark.primary} />
-                  <Text style={styles.locationName}>{searchLocation.name}</Text>
-                </View>
-                <Text style={styles.locationCoords}>
-                  {searchLocation.lat.toFixed(2)}, {searchLocation.lon.toFixed(2)}
-                </Text>
-              </LinearGradient>
-
-              {nearbyLines.length > 0 ? (
-                <View style={styles.analysisContainer}>
-                  <Text style={styles.analysisTitle}>Planetary Influences</Text>
-                  {nearbyLines.map((item, i) => {
-                    const interp = getInterpretation(item.planet, item.lineType);
-                    return (
-                      <Pressable
-                        key={i}
-                        style={({ pressed }) => [
-                          styles.analysisCard,
-                          pressed && { opacity: 0.8 },
-                        ]}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          router.push({
-                            pathname: "/line-detail",
-                            params: { planet: item.planet, lineType: item.lineType },
-                          });
-                        }}
-                      >
-                        <View style={styles.analysisCardTop}>
-                          <View style={[styles.analysisDot, { backgroundColor: Colors.planets[item.planet] }]} />
-                          <Text style={styles.analysisCardTitle}>
-                            {getPlanetSymbol(item.planet)} {Colors.lineTypes[item.lineType]?.label}
-                          </Text>
-                          <View style={[styles.influenceBadge, { backgroundColor: getInfluenceColor(item.influence) + "20" }]}>
-                            <Text style={[styles.influenceText, { color: getInfluenceColor(item.influence) }]}>
-                              {item.influence}
-                            </Text>
-                          </View>
-                        </View>
-                        <Text style={styles.analysisDistance}>
-                          {Math.round(item.distance)} km away
-                        </Text>
-                        <Text style={styles.analysisDesc} numberOfLines={2}>
-                          {interp.shortDesc}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : (
-                <View style={styles.noResults}>
-                  <Ionicons name="telescope-outline" size={32} color={Colors.dark.textMuted} />
-                  <Text style={styles.noResultsText}>
-                    No strong planetary lines near this location
-                  </Text>
-                </View>
-              )}
+                <Text style={[styles.chipText, keywordFilter.toLowerCase() === kw && styles.chipTextActive]}>{kw}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {avoidPlaces.length > 0 ? (
+            <View style={styles.cityList}>
+              {avoidPlaces.map((p, i) => renderCityCard(p, i, "avoid"))}
             </View>
-          )}
-
-          {!searchLocation && (
-            <View style={styles.suggestionsContainer}>
-              <Text style={styles.suggestionsTitle}>Popular Destinations</Text>
-              {[
-                { name: "New York", query: "New York, USA" },
-                { name: "London", query: "London, UK" },
-                { name: "Tokyo", query: "Tokyo, Japan" },
-                { name: "Paris", query: "Paris, France" },
-                { name: "Bali", query: "Bali, Indonesia" },
-                { name: "Sydney", query: "Sydney, Australia" },
-              ].map((city) => (
-                <Pressable
-                  key={city.name}
-                  style={({ pressed }) => [
-                    styles.suggestionItem,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                  onPress={() => {
-                    setSearchQuery(city.query);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                >
-                  <Ionicons name="location-outline" size={18} color={Colors.dark.textSecondary} />
-                  <Text style={styles.suggestionText}>{city.name}</Text>
-                  <Ionicons name="arrow-forward" size={14} color={Colors.dark.textMuted} />
-                </Pressable>
-              ))}
+          ) : (
+            <View style={styles.noResults}>
+              <Ionicons name="shield-checkmark-outline" size={32} color={Colors.dark.success} />
+              <Text style={styles.noResultsText}>No strong difficult lines found — lucky you!</Text>
             </View>
           )}
           <View style={{ height: 120 }} />
@@ -582,376 +704,86 @@ export default function InsightsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.dark.background },
-  centered: { justifyContent: "center", alignItems: "center" },
-  emptyText: {
-    fontSize: 16,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textSecondary,
+  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
+  emptyText: { fontSize: 16, fontFamily: "Outfit_400Regular", color: Colors.dark.textSecondary },
+  header: { paddingHorizontal: 20, paddingBottom: 16, backgroundColor: Colors.dark.background },
+  friendBanner: {
+    marginBottom: 10, backgroundColor: Colors.dark.primary + "14",
+    borderWidth: 1, borderColor: Colors.dark.primary + "40", borderRadius: 12,
+    paddingVertical: 8, paddingHorizontal: 10, flexDirection: "row", alignItems: "center",
+    justifyContent: "space-between", gap: 10,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    backgroundColor: Colors.dark.background,
-  },
-  friendViewBanner: {
-    marginBottom: 10,
-    backgroundColor: Colors.dark.primary + "14",
-    borderWidth: 1,
-    borderColor: Colors.dark.primary + "40",
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  friendViewText: {
-    flex: 1,
-    color: Colors.dark.primary,
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 13,
-  },
-  friendViewClose: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: Colors.dark.primary + "18",
-  },
-  friendViewCloseText: {
-    color: Colors.dark.primary,
-    fontFamily: "Outfit_600SemiBold",
-    fontSize: 12,
-  },
-  screenTitle: {
-    fontSize: 32,
-    fontFamily: "Outfit_700Bold",
-    color: Colors.dark.text,
-    marginBottom: 16,
-  },
-  tabRow: {
-    flexDirection: "row",
-    backgroundColor: Colors.dark.card,
-    borderRadius: 12,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    borderRadius: 10,
-  },
+  friendBannerText: { flex: 1, color: Colors.dark.primary, fontFamily: "Outfit_600SemiBold", fontSize: 13 },
+  friendBannerClose: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, backgroundColor: Colors.dark.primary + "18" },
+  friendBannerCloseText: { color: Colors.dark.primary, fontFamily: "Outfit_600SemiBold", fontSize: 12 },
+  screenTitle: { fontSize: 32, fontFamily: "Outfit_700Bold", color: Colors.dark.text, marginBottom: 16 },
+  tabRow: { flexDirection: "row", backgroundColor: Colors.dark.card, borderRadius: 12, padding: 4 },
+  tab: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 10 },
   tabActive: { backgroundColor: Colors.dark.primary },
-  tabText: {
-    fontSize: 14,
-    fontFamily: "Outfit_500Medium",
-    color: Colors.dark.textSecondary,
-  },
+  tabText: { fontSize: 13, fontFamily: "Outfit_500Medium", color: Colors.dark.textSecondary },
   tabTextActive: { color: Colors.dark.background },
   content: { flex: 1 },
   contentInner: { paddingHorizontal: 20 },
-  planetSection: { marginBottom: 24 },
-  planetHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
-  },
-  planetIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  planetName: {
-    fontSize: 18,
-    fontFamily: "Outfit_600SemiBold",
-  },
-  linesGrid: { gap: 8 },
-  lineCard: {
-    backgroundColor: Colors.dark.card,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-  },
-  lineCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  lineTypeTag: {
-    fontSize: 13,
-    fontFamily: "Outfit_600SemiBold",
-    color: Colors.dark.primary,
-  },
-  lineCardDesc: {
-    fontSize: 13,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textSecondary,
-    lineHeight: 19,
-  },
-  exploreDesc: {
-    fontSize: 15,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textSecondary,
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  searchRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
-  searchInput: {
-    flex: 1,
-    backgroundColor: Colors.dark.card,
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    fontSize: 16,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.text,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-  },
-  searchBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: Colors.dark.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  locationResult: { gap: 16 },
-  locationCard: {
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-  },
-  locationHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  locationName: {
-    fontSize: 18,
-    fontFamily: "Outfit_600SemiBold",
-    color: Colors.dark.text,
-  },
-  locationCoords: {
-    fontSize: 12,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textMuted,
-    marginTop: 4,
-    marginLeft: 30,
-  },
-  analysisContainer: { gap: 10 },
-  analysisTitle: {
-    fontSize: 18,
-    fontFamily: "Outfit_600SemiBold",
-    color: Colors.dark.text,
-    marginBottom: 4,
-  },
-  analysisCard: {
-    backgroundColor: Colors.dark.card,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-  },
-  analysisCardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 6,
-  },
-  analysisDot: { width: 10, height: 10, borderRadius: 5 },
-  analysisCardTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: "Outfit_600SemiBold",
-    color: Colors.dark.text,
-  },
-  influenceBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  influenceText: {
-    fontSize: 11,
-    fontFamily: "Outfit_600SemiBold",
-    textTransform: "uppercase" as const,
-  },
-  analysisDistance: {
-    fontSize: 12,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textMuted,
-    marginBottom: 4,
-  },
-  analysisDesc: {
-    fontSize: 13,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textSecondary,
-    lineHeight: 19,
-  },
-  noResults: {
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 40,
-  },
-  noResultsText: {
-    fontSize: 14,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textMuted,
-    textAlign: "center",
-  },
-  suggestionsContainer: { gap: 8 },
-  suggestionsTitle: {
-    fontSize: 18,
-    fontFamily: "Outfit_600SemiBold",
-    color: Colors.dark.text,
-    marginBottom: 4,
-  },
-  suggestionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: Colors.dark.card,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-  },
-  suggestionText: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: "Outfit_500Medium",
-    color: Colors.dark.text,
-  },
-  // ── Great Places styles ──────────────────────────
-  keywordChipRow: {
-    flexGrow: 0,
-  },
-  keywordChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.dark.card,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-  },
-  keywordChipActive: {
-    backgroundColor: Colors.dark.primaryMuted,
-    borderColor: Colors.dark.primary,
-  },
-  keywordChipText: {
-    fontSize: 13,
-    fontFamily: "Outfit_500Medium",
-    color: Colors.dark.textSecondary,
-    textTransform: "capitalize" as const,
-  },
-  keywordChipTextActive: {
-    color: Colors.dark.primary,
-  },
-  greatPlaceCard: {
-    backgroundColor: Colors.dark.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.dark.cardBorder,
-  },
-  greatPlaceHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 12,
-  },
-  greatPlaceRank: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.dark.primaryMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  greatPlaceRankText: {
-    fontSize: 13,
-    fontFamily: "Outfit_700Bold",
-    color: Colors.dark.primary,
-  },
-  greatPlaceName: {
-    fontSize: 16,
-    fontFamily: "Outfit_600SemiBold",
-    color: Colors.dark.text,
-  },
-  greatPlaceCountry: {
-    fontSize: 12,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textMuted,
-    marginTop: 1,
-  },
-  greatPlaceBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: Colors.dark.primaryMuted,
-  },
-  greatPlaceBadgeText: {
-    fontSize: 11,
-    fontFamily: "Outfit_600SemiBold",
-    color: Colors.dark.primary,
-  },
-  greatPlaceLines: {
-    gap: 6,
-    marginBottom: 10,
-  },
-  greatPlaceLineItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 10,
-  },
-  greatPlaceLineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  greatPlaceLineText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: "Outfit_500Medium",
-    color: Colors.dark.text,
-  },
-  greatPlaceLineDist: {
-    fontSize: 11,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textMuted,
-  },
-  greatPlaceThemes: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  themeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: Colors.dark.secondaryMuted,
-  },
-  themeBadgeText: {
-    fontSize: 11,
-    fontFamily: "Outfit_500Medium",
-    color: Colors.dark.secondary,
-    textTransform: "capitalize" as const,
-  },
+  // ── Summary ──
+  overviewCard: { borderRadius: 20, padding: 24, marginBottom: 24 },
+  overviewTitle: { fontSize: 22, fontFamily: "Outfit_700Bold", color: Colors.dark.text, marginBottom: 4 },
+  overviewSubtitle: { fontSize: 14, fontFamily: "Outfit_400Regular", color: Colors.dark.textSecondary, marginBottom: 20 },
+  statsRow: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
+  statBox: { flex: 1, alignItems: "center" },
+  statNumber: { fontSize: 28, fontFamily: "Outfit_700Bold" },
+  statLabel: { fontSize: 11, fontFamily: "Outfit_500Medium", color: Colors.dark.textSecondary, marginTop: 4, textAlign: "center" },
+  statDivider: { width: 1, height: 36, backgroundColor: Colors.dark.cardBorder },
+  cityCounts: { gap: 8 },
+  cityCountRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  cityCountText: { fontSize: 14, fontFamily: "Outfit_400Regular", color: Colors.dark.textSecondary },
+  summarySection: { marginBottom: 24 },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontFamily: "Outfit_600SemiBold", color: Colors.dark.text, marginBottom: 4 },
+  sectionDesc: { fontSize: 13, fontFamily: "Outfit_400Regular", color: Colors.dark.textSecondary, lineHeight: 19, marginBottom: 12 },
+  seeAllText: { fontSize: 13, fontFamily: "Outfit_600SemiBold", color: Colors.dark.primary },
+  // Themes
+  themesList: { gap: 8 },
+  themeRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.dark.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.dark.cardBorder },
+  themeIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.dark.surface, alignItems: "center", justifyContent: "center" },
+  themeEmoji: { fontSize: 18 },
+  themeRowTitle: { fontSize: 15, fontFamily: "Outfit_600SemiBold", color: Colors.dark.text, textTransform: "capitalize" as const },
+  themeRowCount: { fontSize: 12, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted, marginTop: 1 },
+  // Mini city rows
+  miniCityRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: Colors.dark.card, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: Colors.dark.cardBorder },
+  miniCityName: { flex: 1, fontSize: 15, fontFamily: "Outfit_500Medium", color: Colors.dark.text },
+  miniCityBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  miniCityBadgeText: { fontSize: 12, fontFamily: "Outfit_600SemiBold" },
+  // Search
+  searchRow: { flexDirection: "row", gap: 12 },
+  searchInput: { flex: 1, backgroundColor: Colors.dark.card, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 14, fontSize: 16, fontFamily: "Outfit_400Regular", color: Colors.dark.text, borderWidth: 1, borderColor: Colors.dark.cardBorder },
+  searchBtn: { width: 52, height: 52, borderRadius: 14, backgroundColor: Colors.dark.primary, alignItems: "center", justifyContent: "center" },
+  searchResult: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: Colors.dark.card, borderRadius: 14, padding: 16, marginTop: 12, borderWidth: 1, borderColor: Colors.dark.primary + "40" },
+  searchResultText: { flex: 1, fontSize: 15, fontFamily: "Outfit_500Medium", color: Colors.dark.text },
+  searchResultCta: { fontSize: 13, fontFamily: "Outfit_600SemiBold", color: Colors.dark.primary },
+  // ── List tabs ──
+  tabDesc: { fontSize: 14, fontFamily: "Outfit_400Regular", color: Colors.dark.textSecondary, lineHeight: 21, marginBottom: 14 },
+  chipRow: { flexGrow: 0 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.dark.card, borderWidth: 1, borderColor: Colors.dark.cardBorder },
+  chipActive: { backgroundColor: Colors.dark.primaryMuted, borderColor: Colors.dark.primary },
+  chipText: { fontSize: 13, fontFamily: "Outfit_500Medium", color: Colors.dark.textSecondary, textTransform: "capitalize" as const },
+  chipTextActive: { color: Colors.dark.primary },
+  cityList: { gap: 12 },
+  cityCard: { backgroundColor: Colors.dark.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: Colors.dark.cardBorder },
+  cityCardHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  cityRank: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.dark.primaryMuted, alignItems: "center", justifyContent: "center" },
+  cityRankText: { fontSize: 13, fontFamily: "Outfit_700Bold", color: Colors.dark.primary },
+  cityName: { fontSize: 16, fontFamily: "Outfit_600SemiBold", color: Colors.dark.text },
+  cityCountry: { fontSize: 12, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted, marginTop: 1 },
+  cityBadges: { flexDirection: "row", gap: 4 },
+  miniBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
+  miniBadgeText: { fontSize: 11, fontFamily: "Outfit_700Bold" },
+  cityLines: { gap: 6, marginBottom: 10 },
+  cityLineItem: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, paddingHorizontal: 10, backgroundColor: Colors.dark.surface, borderRadius: 10 },
+  cityLineDot: { width: 6, height: 6, borderRadius: 3 },
+  cityLineText: { flex: 1, fontSize: 13, fontFamily: "Outfit_500Medium" },
+  cityLineDist: { fontSize: 11, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted },
+  cityFooter: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4 },
+  cityFooterText: { fontSize: 12, fontFamily: "Outfit_500Medium", color: Colors.dark.textMuted },
+  noResults: { alignItems: "center", gap: 12, paddingVertical: 40 },
+  noResultsText: { fontSize: 14, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted, textAlign: "center" },
 });
