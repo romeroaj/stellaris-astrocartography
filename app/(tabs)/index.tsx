@@ -16,13 +16,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
-import { BirthData, PlanetName, AstroLine } from "@/lib/types";
-import { getActiveProfile } from "@/lib/storage";
+import { BirthData, PlanetName, AstroLine, OverlapClassification } from "@/lib/types";
+import { getActiveProfile, getSettings } from "@/lib/storage";
+import { filterPlanets, filterAstroLines } from "@/lib/settings";
 import { authFetch } from "@/lib/auth";
 import {
   calculatePlanetPositions,
   calculateGST,
   generateAstroLines,
+  computeCompositePositions,
 } from "@/lib/astronomy";
 import { getPlanetSymbol } from "@/lib/interpretations";
 import {
@@ -36,10 +38,26 @@ import AstroMap from "@/components/AstroMap";
 import Svg, { Line } from "react-native-svg";
 import * as Location from "expo-location";
 import { LiveInsightsCard } from "@/components/LiveInsightsCard";
+import {
+  tagSynastryOverlaps,
+  SynastryOverlap,
+  OVERLAP_COLORS,
+  OVERLAP_LABELS,
+  OVERLAP_DESCRIPTIONS,
+} from "@/lib/synastryAnalysis";
+import { useFriendView } from "@/lib/FriendViewContext";
 
-const ALL_PLANETS: PlanetName[] = [
+const ALL_PLANETS_RAW: PlanetName[] = [
   "sun", "moon", "mercury", "venus", "mars",
-  "jupiter", "saturn", "uranus", "neptune", "pluto",
+  "jupiter", "saturn", "uranus", "neptune", "pluto", "chiron",
+  "northnode", "southnode", "lilith",
+  "ceres", "pallas", "juno", "vesta",
+];
+
+const DEFAULT_PLANETS_RAW: PlanetName[] = [
+  "sun", "moon", "mercury", "venus", "mars",
+  "jupiter", "saturn", "uranus", "neptune", "pluto", "chiron",
+  "northnode", "southnode", "lilith",
 ];
 
 const ALL_SENTIMENTS: LineSentiment[] = ["positive", "difficult", "neutral"];
@@ -53,45 +71,55 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const [profile, setProfile] = useState<BirthData | null>(null);
+  const [partnerProfile, setPartnerProfile] = useState<BirthData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [includeMinorPlanets, setIncludeMinorPlanets] = useState(true);
   const [enabledPlanets, setEnabledPlanets] = useState<Set<PlanetName>>(
-    new Set(ALL_PLANETS)
+    new Set(DEFAULT_PLANETS_RAW)
   );
 
   // Check for Bond params
-  const { mode, bondType, partnerName } = params;
+  const { mode, bondType, partnerId, partnerName } = params;
   const friendIdParam = Array.isArray(params.viewFriendId) ? params.viewFriendId[0] : params.viewFriendId;
   const friendNameParam = Array.isArray(params.viewFriendName) ? params.viewFriendName[0] : params.viewFriendName;
-  const isFriendView = typeof friendIdParam === "string" && friendIdParam.length > 0;
+  const partnerIdParam = Array.isArray(partnerId) ? partnerId[0] : partnerId;
+  const partnerNameParam = Array.isArray(partnerName) ? partnerName[0] : partnerName;
+  const bondTypeParam = ((Array.isArray(bondType) ? bondType[0] : bondType) as "synastry" | "composite" | undefined) || "synastry";
+  const { viewFriendId: ctxFriendId, viewFriendName: ctxFriendName, setFriendView, clearFriendView } = useFriendView();
+  // Params take precedence (from navigation); context persists when switching tabs
+  const effectiveFriendId = (typeof friendIdParam === "string" && friendIdParam) ? friendIdParam : ctxFriendId;
+  const effectiveFriendName = (typeof friendNameParam === "string" && friendNameParam) ? friendNameParam : ctxFriendName;
+  const isFriendView = typeof effectiveFriendId === "string" && effectiveFriendId.length > 0;
+  const isBondMode = mode === "bond" && typeof partnerIdParam === "string" && partnerIdParam.length > 0;
+
+  // Sync params to context when navigating with friend view
+  useEffect(() => {
+    if (friendIdParam && friendNameParam) {
+      setFriendView(friendIdParam, friendNameParam);
+    }
+  }, [friendIdParam, friendNameParam, setFriendView]);
 
   // ── Live Location Insights State ──
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showInsights, setShowInsights] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
 
+  // Silently try to get GPS on first mount for map centering
+  const [initialGps, setInitialGps] = useState<{ latitude: number; longitude: number } | null>(null);
   useEffect(() => {
-    if (mode === "bond" && partnerName) {
-      // Temporary acknowledgment until dual-rendering is built
-      setTimeout(() => {
-        Alert.alert(
-          "Bond Initialized",
-          `Viewing ${bondType === "synastry" ? "Synastry" : "Composite"} Chart with ${partnerName}.\n\n(Dual-chart rendering coming in next update!)`
-        );
-      }, 500);
-    }
-  }, [mode, bondType, partnerName]);
+    (async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === "granted") {
+          const loc = await Location.getLastKnownPositionAsync();
+          if (loc) {
+            setInitialGps({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+          }
+        }
+      } catch {}
+    })();
+  }, []);
 
-  useEffect(() => {
-    if (mode === "bond" && partnerName) {
-      // Temporary acknowledgment until dual-rendering is built
-      setTimeout(() => {
-        Alert.alert(
-          "Bond Initialized",
-          `Viewing ${bondType === "synastry" ? "Synastry" : "Composite"} Chart with ${partnerName}.\n\n(Dual-chart rendering coming in next update!)`
-        );
-      }, 500);
-    }
-  }, [mode, bondType, partnerName]);
 
   const [selectedLine, setSelectedLine] = useState<AstroLine | null>(null);
   const [showLegend, setShowLegend] = useState(false);
@@ -104,7 +132,16 @@ export default function MapScreen() {
   );
   const [enabledKeywords, setEnabledKeywords] = useState<Set<string>>(new Set());
 
+  // Synastry overlap highlight mode — defaults to true in synastry
+  const [showOverlapHighlights, setShowOverlapHighlights] = useState(true);
+  const [synastryOverlaps, setSynastryOverlaps] = useState<SynastryOverlap[]>([]);
+  const [overlapPanelCollapsed, setOverlapPanelCollapsed] = useState(false);
+  const [overlapPanelHidden, setOverlapPanelHidden] = useState(false);
+
   const topInset = Platform.OS === "web" ? 67 : insets.top;
+  const hasBanner = (isBondMode && !!partnerProfile) || (isFriendView && !isBondMode);
+  // Extra offset when a banner is showing so legend/filter don't overlap header buttons
+  const panelTopOffset = topInset + (hasBanner ? 130 : 80);
 
   const pan = useRef(new Animated.ValueXY()).current;
 
@@ -138,32 +175,54 @@ export default function MapScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-    }, [friendIdParam, friendNameParam])
+      getSettings().then((s) => setIncludeMinorPlanets(s.includeMinorPlanets));
+    }, [effectiveFriendId, effectiveFriendName, partnerIdParam, isBondMode])
   );
 
   const loadProfile = async () => {
     setLoading(true);
-    if (friendIdParam) {
-      const res = await authFetch<{ profile: any }>("GET", `/api/friends/${friendIdParam}/profile`);
-      if (res.data?.profile) {
-        const fp = res.data.profile;
-        setProfile({
-          id: `friend_${fp.id}`,
-          name: friendNameParam || fp.name || "Friend",
-          date: fp.birthDate,
-          time: fp.birthTime,
-          latitude: fp.latitude,
-          longitude: fp.longitude,
-          locationName: fp.locationName,
-          createdAt: Date.now(),
+    setPartnerProfile(null);
+
+    if (isBondMode) {
+      const me = await getActiveProfile();
+      if (!me) {
+        Alert.alert("Chart Required", "Set up your birth chart first to view bonds.");
+        router.replace("/(tabs)");
+        setLoading(false);
+        return;
+      }
+      setProfile(me);
+      const { fetchFriendProfile } = await import("@/lib/friendProfile");
+      const partnerData = await fetchFriendProfile(partnerIdParam, partnerNameParam || undefined);
+      if (partnerData) {
+        setPartnerProfile({
+          ...partnerData,
+          id: `partner_${partnerData.id}`,
+          name: partnerNameParam || partnerData.name || "Partner",
         });
       } else {
-        Alert.alert("Friend View Unavailable", res.error || "Could not load your friend's chart.");
+        Alert.alert("Partner Unavailable", "Could not load your partner's chart.");
+      }
+      setLoading(false);
+      return;
+    }
+
+    if (effectiveFriendId) {
+      const { fetchFriendProfile } = await import("@/lib/friendProfile");
+      const friendData = await fetchFriendProfile(effectiveFriendId, effectiveFriendName || undefined);
+      if (friendData) {
+        setProfile({
+          ...friendData,
+          name: effectiveFriendName || friendData.name || "Friend",
+        });
+      } else {
+        Alert.alert("Friend View Unavailable", "Could not load your friend's chart.");
         router.replace("/(tabs)");
       }
       setLoading(false);
       return;
     }
+
     const p = await getActiveProfile();
     setProfile(p);
     setLoading(false);
@@ -174,12 +233,44 @@ export default function MapScreen() {
 
   const astroLines = useMemo(() => {
     if (!profile) return [];
+
+    if (isBondMode && partnerProfile && bondTypeParam === "composite") {
+      const [y1, m1, d1] = profile.date.split("-").map(Number);
+      const [h1, mi1] = profile.time.split(":").map(Number);
+      const [y2, m2, d2] = partnerProfile.date.split("-").map(Number);
+      const [h2, mi2] = partnerProfile.time.split(":").map(Number);
+      const pos1 = calculatePlanetPositions(y1, m1, d1, h1, mi1, profile.longitude);
+      const pos2 = calculatePlanetPositions(y2, m2, d2, h2, mi2, partnerProfile.longitude);
+      const gst1 = calculateGST(y1, m1, d1, h1, mi1, profile.longitude);
+      const gst2 = calculateGST(y2, m2, d2, h2, mi2, partnerProfile.longitude);
+      const { positions: compositePos, gst: compositeGst } = computeCompositePositions(pos1, pos2, gst1, gst2);
+      const raw = generateAstroLines(compositePos, compositeGst);
+      return filterAstroLines(raw, includeMinorPlanets);
+    }
+
+    if (isBondMode && partnerProfile && bondTypeParam === "synastry") {
+      const [y1, m1, d1] = profile.date.split("-").map(Number);
+      const [h1, mi1] = profile.time.split(":").map(Number);
+      const [y2, m2, d2] = partnerProfile.date.split("-").map(Number);
+      const [h2, mi2] = partnerProfile.time.split(":").map(Number);
+      const pos1 = calculatePlanetPositions(y1, m1, d1, h1, mi1, profile.longitude);
+      const pos2 = calculatePlanetPositions(y2, m2, d2, h2, mi2, partnerProfile.longitude);
+      const gst1 = calculateGST(y1, m1, d1, h1, mi1, profile.longitude);
+      const gst2 = calculateGST(y2, m2, d2, h2, mi2, partnerProfile.longitude);
+      const raw1 = generateAstroLines(pos1, gst1, "user");
+      const raw2 = generateAstroLines(pos2, gst2, "partner");
+      const filtered1 = filterAstroLines(raw1, includeMinorPlanets);
+      const filtered2 = filterAstroLines(raw2, includeMinorPlanets);
+      return [...filtered1, ...filtered2];
+    }
+
     const [year, month, day] = profile.date.split("-").map(Number);
     const [hour, minute] = profile.time.split(":").map(Number);
     const positions = calculatePlanetPositions(year, month, day, hour, minute, profile.longitude);
     const gst = calculateGST(year, month, day, hour, minute, profile.longitude);
-    return generateAstroLines(positions, gst);
-  }, [profile]);
+    const raw = generateAstroLines(positions, gst);
+    return filterAstroLines(raw, includeMinorPlanets);
+  }, [profile, partnerProfile, includeMinorPlanets, isBondMode, bondTypeParam]);
 
   // Combined filter: planets AND sentiments AND keywords
   const visibleLines = useMemo(() => {
@@ -212,26 +303,40 @@ export default function MapScreen() {
     });
   }, [astroLines, enabledPlanets, enabledSentiments, enabledKeywords]);
 
+  // ── Synastry overlap tagging ──
+  const synastryResult = useMemo(() => {
+    if (isBondMode && bondTypeParam === "synastry" && partnerProfile) {
+      return tagSynastryOverlaps(visibleLines);
+    }
+    return { lines: visibleLines, overlaps: [] as SynastryOverlap[] };
+  }, [visibleLines, isBondMode, bondTypeParam, partnerProfile]);
+
+  const processedLines = synastryResult.lines;
+
+  useEffect(() => {
+    setSynastryOverlaps(synastryResult.overlaps);
+  }, [synastryResult.overlaps]);
+
   // Handle Deep Linking from Learn Tab
   useEffect(() => {
-    if (params.planet && params.lineType && visibleLines.length > 0) {
-      const target = visibleLines.find(
+    if (params.planet && params.lineType && processedLines.length > 0) {
+      const target = processedLines.find(
         (l) => l.planet === params.planet && l.lineType === params.lineType
       );
       if (target) {
         setSelectedLine(target);
       }
     }
-  }, [params.planet, params.lineType, visibleLines]);
+  }, [params.planet, params.lineType, processedLines]);
 
   // Debounce lines sent to the map to prevent native crash from rapid Polyline updates
   const [debouncedLines, setDebouncedLines] = useState<AstroLine[]>([]);
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedLines(visibleLines);
+      setDebouncedLines(processedLines);
     }, 80);
     return () => clearTimeout(timer);
-  }, [visibleLines]);
+  }, [processedLines]);
 
   const hasActiveFilters = enabledSentiments.size < ALL_SENTIMENTS.length || enabledKeywords.size > 0;
 
@@ -248,12 +353,16 @@ export default function MapScreen() {
     });
   };
 
+  const allPlanets = useMemo(() => filterPlanets(ALL_PLANETS_RAW, includeMinorPlanets), [includeMinorPlanets]);
+  const defaultPlanets = useMemo(() => filterPlanets(DEFAULT_PLANETS_RAW, includeMinorPlanets), [includeMinorPlanets]);
+
   const toggleAllPlanets = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (enabledPlanets.size === ALL_PLANETS.length) {
+    const allEnabled = allPlanets.every((p) => enabledPlanets.has(p));
+    if (allEnabled) {
       setEnabledPlanets(new Set());
     } else {
-      setEnabledPlanets(new Set(ALL_PLANETS));
+      setEnabledPlanets(new Set(allPlanets));
     }
   };
 
@@ -327,7 +436,7 @@ export default function MapScreen() {
 
   if (!profile) return null;
 
-  const allPlanetsEnabled = enabledPlanets.size === ALL_PLANETS.length;
+  const allPlanetsEnabled = allPlanets.every((p) => enabledPlanets.has(p));
 
   return (
     <View style={styles.container}>
@@ -335,7 +444,12 @@ export default function MapScreen() {
         lines={debouncedLines}
         birthLat={profile.latitude}
         birthLon={profile.longitude}
+        userLat={initialGps?.latitude ?? userLocation?.latitude}
+        userLon={initialGps?.longitude ?? userLocation?.longitude}
+        showUserLocation={!!(userLocation || initialGps)}
         colorMode={simplifiedView ? "simplified" : "planet"}
+        bondMode={isBondMode && partnerProfile ? bondTypeParam : undefined}
+        showOverlapHighlights={showOverlapHighlights}
         onLinePress={(line) => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           setSelectedLine(line);
@@ -343,14 +457,54 @@ export default function MapScreen() {
       />
 
       <View style={[styles.header, { paddingTop: topInset + 12 }]}>
-        {isFriendView && (
+        {isBondMode && partnerProfile && (
           <View style={styles.friendViewBanner}>
             <Text style={styles.friendViewText}>
-              Viewing {friendNameParam || profile.name}'s chart
+              {bondTypeParam === "synastry" ? "Synastry" : "Composite"} with {partnerNameParam || partnerProfile.name}
+            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {bondTypeParam === "synastry" && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.friendViewClose,
+                    showOverlapHighlights && { backgroundColor: Colors.dark.primary + "30" },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setShowOverlapHighlights(!showOverlapHighlights);
+                  }}
+                >
+                  <Ionicons
+                    name={showOverlapHighlights ? "git-compare" : "git-compare-outline"}
+                    size={14}
+                    color={Colors.dark.primary}
+                  />
+                  <Text style={styles.friendViewCloseText}>Overlaps</Text>
+                </Pressable>
+              )}
+              <Pressable
+                style={({ pressed }) => [styles.friendViewClose, pressed && { opacity: 0.7 }]}
+                onPress={() => router.replace("/(tabs)")}
+              >
+                <Ionicons name="close" size={16} color={Colors.dark.primary} />
+                <Text style={styles.friendViewCloseText}>Exit</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+        {isFriendView && !isBondMode && (
+          <View style={styles.friendViewBanner}>
+            <Text style={styles.friendViewText}>
+              Viewing {effectiveFriendName || profile.name}'s chart
             </Text>
             <Pressable
               style={({ pressed }) => [styles.friendViewClose, pressed && { opacity: 0.7 }]}
-              onPress={() => router.replace("/(tabs)")}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                clearFriendView();
+                router.replace({ pathname: "/(tabs)", params: {} });
+              }}
             >
               <Ionicons name="close" size={16} color={Colors.dark.primary} />
               <Text style={styles.friendViewCloseText}>Back to Mine</Text>
@@ -455,7 +609,7 @@ export default function MapScreen() {
       {showFilters && (
         <>
           <Pressable style={styles.backdrop} onPress={() => setShowFilters(false)} />
-          <View style={[styles.filterPanel, { top: topInset + 80 }]}>
+          <View style={[styles.filterPanel, { top: panelTopOffset }]}>
             {/* Sentiment Row */}
             <View style={styles.filterSection}>
               <Text style={styles.filterSectionLabel}>Sentiment</Text>
@@ -563,7 +717,7 @@ export default function MapScreen() {
             </Text>
           </Pressable>
 
-          {ALL_PLANETS.map((planet) => (
+          {allPlanets.map((planet) => (
             <Pressable
               key={planet}
               style={[
@@ -596,7 +750,7 @@ export default function MapScreen() {
       </View>
 
       {showLegend && (
-        <View style={[styles.lineTypeLegend, { top: topInset + 80 }]}>
+        <View style={[styles.lineTypeLegend, { top: panelTopOffset }]}>
           {Object.entries(Colors.lineTypes).map(([key, val]) => (
             <View key={key} style={styles.lineTypeItem}>
               <View style={styles.lineTypeSample}>
@@ -619,7 +773,7 @@ export default function MapScreen() {
       )}
 
       {simplifiedView && !showFilters && (
-        <View style={[styles.sentimentLegend, { top: topInset + 80 }]}>
+        <View style={[styles.sentimentLegend, { top: panelTopOffset }]}>
           {ALL_SENTIMENTS.map((key) => (
             <View key={key} style={styles.lineTypeItem}>
               <View
@@ -631,6 +785,126 @@ export default function MapScreen() {
               <Text style={styles.lineTypeLabel}>{SENTIMENT_LABELS[key]}</Text>
             </View>
           ))}
+        </View>
+      )}
+
+      {/* ── Synastry Overlap Insights ── */}
+      {isBondMode && bondTypeParam === "synastry" && showOverlapHighlights && synastryOverlaps.length > 0 && !showFilters && !overlapPanelHidden && (
+        <Pressable
+          style={[
+            styles.overlapPanel,
+            { top: panelTopOffset },
+            overlapPanelCollapsed && styles.overlapPanelCollapsed,
+          ]}
+          onPress={overlapPanelCollapsed ? () => setOverlapPanelCollapsed(false) : undefined}
+        >
+          <View style={[styles.overlapHeader, overlapPanelCollapsed && styles.overlapHeaderCollapsed]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+              <Ionicons name="git-compare" size={14} color={Colors.dark.primary} />
+              <Text style={styles.overlapHeaderText}>
+                {synastryOverlaps.length} Shared Overlap{synastryOverlaps.length > 1 ? "s" : ""}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Pressable
+                style={({ pressed }) => [styles.overlapHeaderBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setOverlapPanelCollapsed(!overlapPanelCollapsed);
+                }}
+              >
+                <Ionicons
+                  name={overlapPanelCollapsed ? "chevron-down" : "chevron-up"}
+                  size={16}
+                  color={Colors.dark.primary}
+                />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.overlapHeaderBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setOverlapPanelHidden(true);
+                }}
+              >
+                <Ionicons name="close" size={14} color={Colors.dark.textMuted} />
+              </Pressable>
+            </View>
+          </View>
+          {!overlapPanelCollapsed && (
+            <ScrollView
+              style={styles.overlapScroll}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 8 }}
+            >
+              {synastryOverlaps.map((overlap) => {
+            const color = OVERLAP_COLORS[overlap.classification];
+            const label = OVERLAP_LABELS[overlap.classification];
+            const planetName = overlap.planet.charAt(0).toUpperCase() + overlap.planet.slice(1);
+            const lineLabel = Colors.lineTypes[overlap.lineType]?.label || overlap.lineType;
+            return (
+              <Pressable
+                key={`${overlap.planet}-${overlap.lineType}`}
+                style={styles.overlapItem}
+                onPress={() => {
+                  // Find and select this overlap's user line
+                  const target = processedLines.find(
+                    (l) =>
+                      l.planet === overlap.planet &&
+                      l.lineType === overlap.lineType &&
+                      l.sourceId === "user"
+                  );
+                  if (target) {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    setSelectedLine(target);
+                  }
+                }}
+              >
+                <View style={[styles.overlapDot, { backgroundColor: color }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.overlapItemTitle}>
+                    {getPlanetSymbol(overlap.planet)} {planetName} {lineLabel}
+                  </Text>
+                  <Text style={[styles.overlapItemLabel, { color }]}>{label}</Text>
+                </View>
+                <Text style={styles.overlapProximity}>
+                  {overlap.proximityDeg.toFixed(0)}°
+                </Text>
+              </Pressable>
+            );
+          })}
+            </ScrollView>
+          )}
+        </Pressable>
+      )}
+
+      {/* Floating chip to restore overlap panel when hidden */}
+      {isBondMode && bondTypeParam === "synastry" && showOverlapHighlights && synastryOverlaps.length > 0 && overlapPanelHidden && !showFilters && (
+        <Pressable
+          style={[styles.overlapRestoreChip, { top: panelTopOffset }]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setOverlapPanelHidden(false);
+            setOverlapPanelCollapsed(false);
+          }}
+        >
+          <Ionicons name="git-compare" size={14} color={Colors.dark.primary} />
+          <Text style={styles.overlapRestoreText}>
+            {synastryOverlaps.length} Overlaps
+          </Text>
+        </Pressable>
+      )}
+
+      {/* Synastry color key (when overlap highlights are off) */}
+      {isBondMode && bondTypeParam === "synastry" && !showOverlapHighlights && !showFilters && (
+        <View style={[styles.sentimentLegend, { top: panelTopOffset }]}>
+          <View style={styles.lineTypeItem}>
+            <View style={[styles.sentimentDot, { backgroundColor: Colors.dark.primary }]} />
+            <Text style={styles.lineTypeLabel}>You</Text>
+          </View>
+          <View style={styles.lineTypeItem}>
+            <View style={[styles.sentimentDot, { backgroundColor: Colors.dark.secondary }]} />
+            <Text style={styles.lineTypeLabel}>{partnerNameParam || "Partner"}</Text>
+          </View>
         </View>
       )}
 
@@ -650,12 +924,17 @@ export default function MapScreen() {
             <Pressable
               style={styles.selectedCard}
               onPress={() => {
+                const params: Record<string, string> = {
+                  planet: selectedLine.planet,
+                  lineType: selectedLine.lineType,
+                };
+                if (isFriendView && effectiveFriendId && effectiveFriendName) {
+                  params.viewFriendId = effectiveFriendId;
+                  params.viewFriendName = effectiveFriendName;
+                }
                 router.push({
                   pathname: "/line-detail",
-                  params: {
-                    planet: selectedLine.planet,
-                    lineType: selectedLine.lineType,
-                  },
+                  params,
                 });
               }}
             >
@@ -691,6 +970,7 @@ export default function MapScreen() {
           location={userLocation}
           birthProfile={profile}
           onClose={() => setShowInsights(false)}
+          includeMinorPlanets={includeMinorPlanets}
         />
       )}
     </View>
@@ -939,6 +1219,100 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
+  },
+  // ── Synastry Overlap Panel ──
+  overlapPanel: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    maxHeight: 280,
+    backgroundColor: Colors.dark.overlay,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+    zIndex: 10,
+  },
+  overlapPanelCollapsed: {
+    maxHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  overlapHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.cardBorder,
+  },
+  overlapHeaderCollapsed: {
+    marginBottom: 0,
+    paddingBottom: 0,
+    borderBottomWidth: 0,
+  },
+  overlapHeaderBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.dark.surface + "80",
+  },
+  overlapScroll: {
+    maxHeight: 220,
+  },
+  overlapHeaderText: {
+    fontSize: 12,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  overlapItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.dark.cardBorder,
+  },
+  overlapDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  overlapItemTitle: {
+    fontSize: 13,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.text,
+  },
+  overlapItemLabel: {
+    fontSize: 11,
+    fontFamily: "Outfit_600SemiBold",
+    marginTop: 1,
+  },
+  overlapProximity: {
+    fontSize: 11,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textMuted,
+  },
+  overlapRestoreChip: {
+    position: "absolute",
+    left: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.dark.overlay,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+    zIndex: 10,
+  },
+  overlapRestoreText: {
+    fontSize: 12,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.primary,
   },
   // ── Selected Line Card ──
   selectedOverlay: {
