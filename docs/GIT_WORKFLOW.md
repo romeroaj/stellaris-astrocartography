@@ -1,5 +1,62 @@
 # Git & Linear Workflow Guide
 
+## Worktrees: Run multiple features in parallel
+
+You can work on several Linear issues at once by using **git worktrees** — each branch gets its own folder, so each Cursor window (or AI agent) can work on a different feature.
+
+### Setup a worktree for an issue
+
+From the repo root:
+
+```bash
+git checkout main && git pull
+
+# Create the branch (or use existing)
+git checkout -b codex/LUM-XX-short-description
+
+# Create a worktree — new folder with this branch checked out
+git worktree add ../stellaris-LUM-XX codex/LUM-XX-short-description
+```
+
+Then open `../stellaris-LUM-XX` in a new Cursor window. That window = that branch.
+
+### How to ask (you or an AI agent)
+
+Use one of these when you want a worktree for an issue:
+
+- **"Create a worktree for LUM-15"**
+- **"Set up a worktree branch for LUM-15 so I can work on it in another window"**
+- **"I need a worktree for issue LUM-15 — create the branch and worktree, I'll open it in a new Cursor window"**
+
+The agent should: create the branch from main (if needed), run `git worktree add ../stellaris-LUM-15 codex/LUM-15-slug`, and tell you the path to open.
+
+### Worktree naming
+
+- Path: `../stellaris-LUM-XX` or `../stellaris-astrocartography-LUM-XX`
+- Keeps worktrees easy to find by issue ID
+
+### Expo + worktrees
+
+Expo runs against the folder you start it in. To test a feature:
+
+```bash
+cd ../stellaris-LUM-15
+npx expo start
+```
+
+Expo Go will load that worktree’s code.
+
+### Cleanup when done
+
+```bash
+# After merging the PR
+git worktree remove ../stellaris-LUM-15
+# or if it was deleted manually:
+git worktree prune
+```
+
+---
+
 ## The "unsaved work on main" message (GitHub Desktop)
 
 GitHub Desktop shows this when there are **untracked files** in your repo. Common causes:
