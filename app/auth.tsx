@@ -17,106 +17,97 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import * as WebBrowser from "expo-web-browser";
-import { makeRedirectUri } from "expo-auth-session";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-
-WebBrowser.maybeCompleteAuthSession?.(); // Required for OAuth redirect on web
-
-function parseParamsFromUrl(url: string): Record<string, string> {
-    const out: Record<string, string> = {};
-    try {
-        const hash = url.includes("#") ? url.split("#")[1] : "";
-        const query = url.includes("?") ? url.split("?")[1]?.split("#")[0] ?? "" : "";
-        const parse = (s: string) => {
-            s.split("&").forEach((p) => {
-                const [k, v] = p.split("=");
-                if (k && v) out[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, " "));
-            });
-        };
-        if (hash) parse(hash);
-        if (query) parse(query);
-    } catch {}
-    return out;
-}
 
 export default function AuthScreen() {
     const insets = useSafeAreaInsets();
     const { refreshUser } = useAuth();
 
     const [email, setEmail] = useState("");
-    const [loading, setLoading] = useState<string | null>(null); // "apple" | "google" | "email" | null
+    const [code, setCode] = useState("");
+    const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [justSignedIn, setJustSignedIn] = useState(false);
 
     const topInset = Platform.OS === "web" ? 67 : insets.top;
     const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
-    const handleOAuth = async (provider: "apple" | "google") => {
-        if (!supabase || !isSupabaseConfigured) {
-            Alert.alert("Not configured", "Add Supabase URL and anon key to use sign-in.");
-            return;
-        }
-        setLoading(provider);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        try {
-            const redirectTo = makeRedirectUri({ path: "auth/callback", scheme: "stellaris" });
-            const { data, error } = await supabase.auth.signInWithOAuth({
-                provider,
-                options: { redirectTo, skipBrowserRedirect: true },
-            });
-            if (error) throw error;
-            if (!data?.url) {
-                Alert.alert("Error", "Could not start sign-in.");
-                return;
-            }
-            const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-            if (result.type === "success" && result.url) {
-                const params = parseParamsFromUrl(result.url);
-                const access_token = params.access_token;
-                const refresh_token = params.refresh_token;
-                if (access_token) {
-                    await supabase.auth.setSession({ access_token, refresh_token: refresh_token ?? "" });
-                    await refreshUser();
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    router.replace("/(tabs)");
-                } else if (params.error_description) {
-                    Alert.alert("Sign-in failed", params.error_description);
-                }
-            }
-        } catch (e: any) {
-            Alert.alert("Error", e?.message ?? "Sign-in failed.");
-        } finally {
-            setLoading(null);
-        }
-    };
-
-    const handleMagicLink = async () => {
+    const handleSendCode = async () => {
         if (!supabase || !isSupabaseConfigured) {
             Alert.alert("Not configured", "Add Supabase URL and anon key to use sign-in.");
             return;
         }
         const trimmed = email.trim();
         if (!trimmed) {
-            Alert.alert("Email required", "Enter your email to receive a sign-in link.");
+            Alert.alert("Email required", "Enter your email to receive a sign-in code.");
             return;
         }
-        setLoading("email");
+        setLoading(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
-            const redirectTo = makeRedirectUri({ path: "auth/callback", scheme: "stellaris" });
-            const { error } = await supabase.auth.signInWithOtp({
-                email: trimmed,
-                options: { emailRedirectTo: redirectTo },
+            const { error } = await supabase.auth.signInWithOtp({ email: trimmed });
+            if (error) throw error;
+            setPendingEmail(trimmed);
+            setCode("");
+        } catch (e: any) {
+            Alert.alert("Error", e?.message ?? "Failed to send code.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyCode = async () => {
+        if (!supabase || !pendingEmail) return;
+        const trimmed = code.trim();
+        if (!trimmed || trimmed.length !== 6) {
+            Alert.alert("Enter code", "Enter the 6-digit code from your email.");
+            return;
+        }
+        setLoading(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        try {
+            const { data, error } = await supabase.auth.verifyOtp({
+                email: pendingEmail,
+                token: trimmed,
+                type: "email",
             });
             if (error) throw error;
-            Alert.alert("Check your email", "We sent you a sign-in link. Open it to continue.");
-            setEmail("");
+            if (data.session) {
+                const token = data.session.access_token;
+                const baseUrl = (await import("@/lib/query-client")).getApiUrl();
+                const meUrl = new URL("/api/auth/me", baseUrl);
+                try {
+                    const meRes = await fetch(meUrl.toString(), {
+                        method: "GET",
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (!meRes.ok) {
+                        const body = await meRes.text();
+                        throw new Error(`${meRes.status}: ${body}`);
+                    }
+                    await refreshUser();
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    setJustSignedIn(true);
+                    setTimeout(() => router.replace("/(tabs)"), 1200);
+                } catch (e: any) {
+                    Alert.alert(
+                        "Connection issue",
+                        `Sign-in worked, but the server call failed:\n${e?.message ?? "Unknown error"}\n\nAPI: ${meUrl.toString()}`
+                    );
+                }
+            }
         } catch (e: any) {
-            Alert.alert("Error", e?.message ?? "Failed to send link.");
+            Alert.alert("Error", e?.message ?? "Invalid or expired code.");
         } finally {
-            setLoading(null);
+            setLoading(false);
         }
+    };
+
+    const handleBack = () => {
+        setPendingEmail(null);
+        setCode("");
     };
 
     const handleSkip = () => {
@@ -163,76 +154,83 @@ export default function AuthScreen() {
                             </View>
 
                             <View style={styles.formSection}>
-                                <Pressable
-                                    style={({ pressed }) => [
-                                        styles.oauthButton,
-                                        (loading === "apple" || loading === "google") && styles.buttonDisabled,
-                                        pressed && styles.buttonPressed,
-                                    ]}
-                                    onPress={() => handleOAuth("apple")}
-                                    disabled={!!loading}
-                                >
-                                    {loading === "apple" ? (
-                                        <ActivityIndicator size="small" color={Colors.dark.background} />
-                                    ) : (
-                                        <>
-                                            <Ionicons name="logo-apple" size={22} color={Colors.dark.background} />
-                                            <Text style={styles.oauthButtonText}>Continue with Apple</Text>
-                                        </>
-                                    )}
-                                </Pressable>
-                                <Pressable
-                                    style={({ pressed }) => [
-                                        styles.oauthButton,
-                                        (loading === "apple" || loading === "google") && styles.buttonDisabled,
-                                        pressed && styles.buttonPressed,
-                                    ]}
-                                    onPress={() => handleOAuth("google")}
-                                    disabled={!!loading}
-                                >
-                                    {loading === "google" ? (
-                                        <ActivityIndicator size="small" color={Colors.dark.background} />
-                                    ) : (
-                                        <>
-                                            <Ionicons name="logo-google" size={20} color={Colors.dark.background} />
-                                            <Text style={styles.oauthButtonText}>Continue with Google</Text>
-                                        </>
-                                    )}
-                                </Pressable>
-
-                                <View style={styles.divider}>
-                                    <View style={styles.dividerLine} />
-                                    <Text style={styles.dividerText}>or</Text>
-                                    <View style={styles.dividerLine} />
-                                </View>
-
-                                <TextInput
-                                    style={styles.input}
-                                    value={email}
-                                    onChangeText={setEmail}
-                                    placeholder="Email (magic link)"
-                                    placeholderTextColor={Colors.dark.textMuted}
-                                    keyboardType="email-address"
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    returnKeyType="done"
-                                    onSubmitEditing={handleMagicLink}
-                                />
-                                <Pressable
-                                    style={({ pressed }) => [
-                                        styles.magicLinkButton,
-                                        loading === "email" && styles.buttonDisabled,
-                                        pressed && styles.buttonPressed,
-                                    ]}
-                                    onPress={handleMagicLink}
-                                    disabled={loading === "email"}
-                                >
-                                    {loading === "email" ? (
-                                        <ActivityIndicator size="small" color={Colors.dark.primary} />
-                                    ) : (
-                                        <Text style={styles.magicLinkButtonText}>Send magic link</Text>
-                                    )}
-                                </Pressable>
+                                {justSignedIn ? (
+                                    <View style={styles.successBlock}>
+                                        <View style={styles.successIcon}>
+                                            <Ionicons name="checkmark-circle" size={56} color={Colors.dark.primary} />
+                                        </View>
+                                        <Text style={styles.successText}>Signed in!</Text>
+                                    </View>
+                                ) : pendingEmail ? (
+                                    <>
+                                        <Text style={styles.codePrompt}>
+                                            Check your email for a 6-digit code
+                                        </Text>
+                                        <TextInput
+                                            style={[styles.input, styles.codeInput]}
+                                            value={code}
+                                            onChangeText={setCode}
+                                            placeholder="000000"
+                                            placeholderTextColor={Colors.dark.textMuted}
+                                            keyboardType="number-pad"
+                                            maxLength={6}
+                                            autoFocus
+                                            returnKeyType="done"
+                                            onSubmitEditing={handleVerifyCode}
+                                        />
+                                        <Pressable
+                                            style={({ pressed }) => [
+                                                styles.magicLinkButton,
+                                                loading && styles.buttonDisabled,
+                                                pressed && styles.buttonPressed,
+                                            ]}
+                                            onPress={handleVerifyCode}
+                                            disabled={loading}
+                                        >
+                                            {loading ? (
+                                                <ActivityIndicator size="small" color={Colors.dark.primary} />
+                                            ) : (
+                                                <Text style={styles.magicLinkButtonText}>Verify code</Text>
+                                            )}
+                                        </Pressable>
+                                        <Pressable
+                                            style={({ pressed }) => [styles.backLink, pressed && { opacity: 0.7 }]}
+                                            onPress={handleBack}
+                                        >
+                                            <Text style={styles.backLinkText}>Use a different email</Text>
+                                        </Pressable>
+                                    </>
+                                ) : (
+                                    <>
+                                        <TextInput
+                                            style={styles.input}
+                                            value={email}
+                                            onChangeText={setEmail}
+                                            placeholder="Email"
+                                            placeholderTextColor={Colors.dark.textMuted}
+                                            keyboardType="email-address"
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                            returnKeyType="done"
+                                            onSubmitEditing={handleSendCode}
+                                        />
+                                        <Pressable
+                                            style={({ pressed }) => [
+                                                styles.magicLinkButton,
+                                                loading && styles.buttonDisabled,
+                                                pressed && styles.buttonPressed,
+                                            ]}
+                                            onPress={handleSendCode}
+                                            disabled={loading}
+                                        >
+                                            {loading ? (
+                                                <ActivityIndicator size="small" color={Colors.dark.primary} />
+                                            ) : (
+                                                <Text style={styles.magicLinkButtonText}>Send code</Text>
+                                            )}
+                                        </Pressable>
+                                    </>
+                                )}
 
                                 <Pressable style={({ pressed }) => [styles.skipButton, pressed && { opacity: 0.6 }]} onPress={handleSkip}>
                                     <Text style={styles.skipText}>Continue without an account</Text>
@@ -263,23 +261,8 @@ const styles = StyleSheet.create({
     title: { fontSize: 28, fontFamily: "Outfit_700Bold", color: Colors.dark.text, marginBottom: 8 },
     subtitle: { fontSize: 15, fontFamily: "Outfit_400Regular", color: Colors.dark.textSecondary, textAlign: "center", lineHeight: 22 },
     formSection: { gap: 14 },
-    oauthButton: {
-        height: 52,
-        borderRadius: 14,
-        backgroundColor: Colors.dark.card,
-        borderWidth: 1,
-        borderColor: Colors.dark.cardBorder,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 10,
-    },
-    oauthButtonText: { fontSize: 16, fontFamily: "Outfit_600SemiBold", color: Colors.dark.text },
     buttonDisabled: { opacity: 0.5 },
     buttonPressed: { opacity: 0.85 },
-    divider: { flexDirection: "row", alignItems: "center", marginVertical: 8 },
-    dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
-    dividerText: { marginHorizontal: 12, fontSize: 13, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted },
     input: {
         height: 52,
         backgroundColor: "rgba(255,255,255,0.07)",
@@ -301,6 +284,19 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
     magicLinkButtonText: { fontSize: 16, fontFamily: "Outfit_600SemiBold", color: Colors.dark.primary },
+    codePrompt: {
+        fontSize: 14,
+        fontFamily: "Outfit_400Regular",
+        color: Colors.dark.textSecondary,
+        textAlign: "center",
+        marginBottom: 8,
+    },
+    codeInput: { textAlign: "center", fontSize: 24, letterSpacing: 8 },
+    successBlock: { alignItems: "center", paddingVertical: 24 },
+    successIcon: { marginBottom: 12 },
+    successText: { fontSize: 20, fontFamily: "Outfit_600SemiBold", color: Colors.dark.primary },
+    backLink: { alignItems: "center", paddingVertical: 12 },
+    backLinkText: { fontSize: 14, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted },
     skipButton: { alignItems: "center", paddingVertical: 20 },
     skipText: { fontSize: 14, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted },
 });

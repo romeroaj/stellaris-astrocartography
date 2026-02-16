@@ -22,6 +22,7 @@ import {
   getSideOfLineInfo,
 } from "@/lib/interpretations";
 import { getActiveProfile } from "@/lib/storage";
+import { fetchFriendProfile } from "@/lib/friendProfile";
 import {
   calculatePlanetPositions,
   calculateGST,
@@ -99,12 +100,17 @@ function getSideMessage(line: CityLine): string {
 }
 
 export default function CityDetailScreen() {
-  const { name, country, lat, lon } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     name: string;
     country: string;
     lat: string;
     lon: string;
+    viewFriendId?: string;
+    viewFriendName?: string;
   }>();
+  const { name, country, lat, lon, viewFriendId, viewFriendName } = params;
+  const friendId = Array.isArray(viewFriendId) ? viewFriendId[0] : viewFriendId;
+  const friendName = Array.isArray(viewFriendName) ? viewFriendName[0] : viewFriendName;
 
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
@@ -117,14 +123,21 @@ export default function CityDetailScreen() {
   useFocusEffect(
     React.useCallback(() => {
       analyze();
-    }, [name, lat, lon])
+    }, [name, lat, lon, friendId, friendName])
   );
 
   const analyze = async () => {
     if (!lat || !lon) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [profile, s] = await Promise.all([getActiveProfile(), getSettings()]);
+      let profile: BirthData | null = null;
+      if (friendId && friendName) {
+        profile = await fetchFriendProfile(friendId, friendName);
+      }
+      if (!profile) {
+        profile = await getActiveProfile();
+      }
+      const s = await getSettings();
       if (!profile) { setLoading(false); return; }
       setIncludeMinorPlanets(s.includeMinorPlanets);
 

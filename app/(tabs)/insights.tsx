@@ -336,10 +336,12 @@ export default function InsightsScreen() {
   // ── Navigation to city detail ──
   const openCity = (city: CityAnalysis) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push({
-      pathname: "/city-detail",
-      params: { name: city.name, country: city.country, lat: String(city.lat), lon: String(city.lon) },
-    });
+    const params: Record<string, string> = { name: city.name, country: city.country, lat: String(city.lat), lon: String(city.lon) };
+    if (isFriendView && effectiveFriendId && effectiveFriendName) {
+      params.viewFriendId = effectiveFriendId;
+      params.viewFriendName = effectiveFriendName;
+    }
+    router.push({ pathname: "/city-detail", params });
   };
 
   // ── Render: City card for list views ──
@@ -567,15 +569,17 @@ export default function InsightsScreen() {
                 style={styles.searchResult}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  router.push({
-                    pathname: "/city-detail",
-                    params: {
-                      name: searchLocation.name,
-                      country: "",
-                      lat: String(searchLocation.lat),
-                      lon: String(searchLocation.lon),
-                    },
-                  });
+                  const params: Record<string, string> = {
+                    name: searchLocation.name,
+                    country: "",
+                    lat: String(searchLocation.lat),
+                    lon: String(searchLocation.lon),
+                  };
+                  if (isFriendView && effectiveFriendId && effectiveFriendName) {
+                    params.viewFriendId = effectiveFriendId;
+                    params.viewFriendName = effectiveFriendName;
+                  }
+                  router.push({ pathname: "/city-detail", params });
                 }}
               >
                 <Ionicons name="location" size={18} color={Colors.dark.primary} />

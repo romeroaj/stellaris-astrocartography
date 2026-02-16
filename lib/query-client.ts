@@ -4,12 +4,12 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 /**
  * Gets the base URL for the Express API server.
  * Priority:
- *   1. EXPO_PUBLIC_API_URL  — explicit full URL (e.g. http://192.168.x.x:5000 or https://app.railway.app)
+ *   1. EXPO_PUBLIC_API_URL  — explicit full URL (e.g. http://192.168.x.x:5000 or your production API)
  *   2. EXPO_PUBLIC_DOMAIN   — Replit-style host:port (legacy, kept for compatibility)
  *   3. Fallback to local machine IP for Expo Go development
  */
 export function getApiUrl(): string {
-  // Explicit API URL takes priority (set in .env or Railway)
+  // Explicit API URL takes priority (set in .env or your deployment)
   const apiUrl = process.env.EXPO_PUBLIC_API_URL;
   if (apiUrl) {
     return apiUrl.endsWith("/") ? apiUrl : `${apiUrl}/`;

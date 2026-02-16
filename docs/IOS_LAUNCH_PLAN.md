@@ -9,7 +9,7 @@ Quick reference for shipping Stellaris as a native iOS app and how to handle aut
 Use this as the master list before submitting to the App Store.
 
 - [ ] **EAS Build** — Add `eas.json`; run `eas build --platform ios` and confirm build succeeds.
-- [ ] **Production API** — Set `EXPO_PUBLIC_API_URL` in EAS secrets so the built app hits your production backend (e.g. Railway).
+- [ ] **Production API** — Set `EXPO_PUBLIC_API_URL` in EAS secrets so the built app hits your production backend.
 - [ ] **Gate dev login** — Disable or restrict `/api/auth/dev-login` in production (e.g. only when `NODE_ENV !== 'production'`).
 - [ ] **Privacy policy** — Host a privacy policy page; add URL in App Store Connect and in-app (e.g. Profile or Settings).
 - [ ] **App Store Connect** — Create the app, fill metadata, pricing (free/paid), and data collection disclosure.
@@ -121,7 +121,7 @@ High-level checklist:
 | **Expo / React Native** | ✅ | Expo 54, `app.json` has `ios.bundleIdentifier` |
 | **EAS Build** | ❌ | No `eas.json` yet | Add `eas.json` and run `eas build --platform ios --profile production` (or preview) |
 | **App Store Connect** | — | — | Create app, fill metadata, pricing, etc. |
-| **API URL in prod** | ✅ | `EXPO_PUBLIC_API_URL` used (e.g. Railway) | Ensure iOS build uses prod API URL via env |
+| **API URL in prod** | ✅ | `EXPO_PUBLIC_API_URL` used | Ensure iOS build uses prod API URL via env |
 
 **Action:** Add `eas.json` with at least an `ios` profile (e.g. `preview` for TestFlight, `production` for store). Set `EXPO_PUBLIC_API_URL` in EAS secrets or app config so the built app hits your production API.
 
@@ -131,7 +131,7 @@ High-level checklist:
 |------|--------|--------|
 | **Dev login** | ⚠️ | `/api/auth/dev-login` live | Remove or strictly gate (e.g. `NODE_ENV !== 'production'` or feature flag) before store |
 | **Production auth** | ⚠️ | Magic link + Apple/Google exist | Add phone auth (or ship with Apple + magic link only at first) |
-| **HTTPS / API** | — | — | Ensure API is HTTPS in prod (you’re already on Railway) |
+| **HTTPS / API** | — | — | Ensure API is HTTPS in prod |
 
 **Action:** Before submission, disable or restrict dev-login in production. Decide: ship with Apple + magic link only, or add phone first.
 
@@ -156,8 +156,8 @@ High-level checklist:
 
 | Item | Status | Action |
 |------|--------|--------|
-| **Database** | ✅ | Drizzle + PostgreSQL (e.g. Railway) | Ensure prod DB and migrations applied |
-| **Secrets** | — | JWT, Resend, etc. | All in env (e.g. Railway); no dev secrets in prod build |
+| **Database** | ✅ | Drizzle + PostgreSQL (Supabase) | Ensure prod DB and migrations applied |
+| **Secrets** | — | JWT, Resend, etc. | All in env on your server; no dev secrets in prod build |
 
 ---
 

@@ -1,6 +1,19 @@
 # Supabase setup (DB + Auth)
 
-Stellaris uses **Supabase** for PostgreSQL and Auth (Apple, Google, magic link email). Follow these steps to move from Railway (or start fresh).
+Stellaris uses **Supabase** for PostgreSQL and Auth (email magic link). Follow these steps to set up or start fresh.
+
+---
+
+## 0. Migrating from an existing database (one-off)
+
+If you have data in another Postgres instance (e.g. a previous hosting provider), copy it into Supabase once:
+
+1. Ensure Supabase has the schema (`npm run db:push` with `DATABASE_URL` set to Supabase).
+2. Run the migration script with **source** (old DB) and **target** (Supabase) URLs:
+   ```bash
+   SOURCE_DATABASE_URL="postgresql://..." TARGET_DATABASE_URL="postgresql://..." npx tsx scripts/migrate-railway-to-supabase.ts
+   ```
+3. Verify row counts in the Supabase SQL editor, then point the app and server at Supabase only.
 
 ---
 
@@ -15,12 +28,14 @@ Stellaris uses **Supabase** for PostgreSQL and Auth (Apple, Google, magic link e
 ## 2. Point the app to Supabase Postgres
 
 1. In Supabase: **Project Settings** → **Database**.
-2. Copy the **Connection string** (URI). Use **Session mode** (or Transaction if you prefer).
-   - Format: `postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres`
-3. Set **DATABASE_URL** everywhere you run the server (Railway, local `.env`):
+2. Copy the **Connection string** (URI).
+   - **Direct** (port 5432): `postgresql://postgres:[YOUR-PASSWORD]@db.xxxx.supabase.co:5432/postgres`
+   - **Pooler** (port 6543, for serverless): use the Session mode URI from the dashboard if you prefer.
+3. Set **DATABASE_URL** everywhere you run the server (production host or local `.env`). Example (direct):
    ```bash
-   DATABASE_URL="postgresql://postgres.xxxx:YOUR_PASSWORD@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
+   DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@db.xxxx.supabase.co:5432/postgres"
    ```
+   Put the real password in your env file only (never commit it).
 4. Run migrations so your tables exist in Supabase:
    ```bash
    npm run db:push
@@ -29,12 +44,14 @@ Stellaris uses **Supabase** for PostgreSQL and Auth (Apple, Google, magic link e
 
 ---
 
-## 3. Configure Supabase Auth (Apple, Google, magic link)
+## 3. Configure Supabase Auth (email magic link)
 
-1. In Supabase: **Authentication** → **Providers**.
-2. **Email**: Enable **Email**. Turn on **Confirm email** if you want; for magic link you can leave it off or use “Confirm email” to send a link.
-3. **Apple**: Enable **Apple**. You need an Apple Developer account and an App ID / Service ID. Set **Services ID** (e.g. `com.stellaris.astrocartography.signin`), **Secret Key**, **Key ID**, **Team ID**, **Bundle ID**.
+1. In Supabase: **Authentication** → **Providers** → **Email**.
+2. Enable **Email**. Turn on **Confirm email** if you want; for magic link you can leave it off or use “Confirm email” to send a link.
+3. **Apple** (optional): See “Apple (optional)” below. **Client ID** = your **Services ID** for web/OAuth (create in Apple Developer Console → Identifiers → Services IDs, e.g. `com.stellaris.astrocartography.signin`). Also set Secret Key, Key ID, Team ID, Bundle ID.
 4. **Google**: Enable **Google**. Create OAuth 2.0 credentials in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (Web application or iOS), set **Client ID** and **Client secret** in Supabase.
+
+**Apple details:** For **Client IDs**, use a **Services ID** (web/OAuth) or **Bundle ID** (native iOS); comma-separated. Create a Services ID in [Apple Developer](https://developer.apple.com/account) → Identifiers → Services IDs. Set its Website URL to your Supabase callback domain. Add it and your Secret Key to Supabase. Secret keys expire every 6 months. Skip Apple if the setup feels too heavy.
 
 ---
 
@@ -49,7 +66,7 @@ Stellaris uses **Supabase** for PostgreSQL and Auth (Apple, Google, magic link e
 
 ---
 
-## 5. Server env (Railway or local)
+## 5. Server env (production or local)
 
 So the API can verify Supabase JWTs and talk to the same DB:
 
@@ -59,7 +76,7 @@ So the API can verify Supabase JWTs and talk to the same DB:
 | **SUPABASE_URL** | Supabase → Project Settings → API → **Project URL** (e.g. `https://xxxx.supabase.co`). |
 | **SUPABASE_JWT_SECRET** | Supabase → Project Settings → API → **JWT Secret** (Project API keys). |
 
-Set these in Railway (or in `.env` for local). Restart the server after changing.
+Set these on your server (or in `.env` for local). Restart the server after changing.
 
 ---
 
