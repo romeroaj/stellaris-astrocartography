@@ -30,6 +30,7 @@ import {
 import { calculatePlanetPositions, calculateGST } from "@/lib/astronomy";
 import { computeNatalChart, ELEMENT_COLORS, NatalChart } from "@/lib/natal";
 import { useAuth } from "@/lib/AuthContext";
+import { usePurchase } from "@/lib/PurchaseContext";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -53,6 +54,7 @@ export default function ProfileScreen() {
   const [editSaving, setEditSaving] = useState(false);
 
   const { user: authUser, isLoggedIn, logout } = useAuth();
+  const { isPremium } = usePurchase();
 
   const editDayRef = useRef<TextInput>(null);
   const editYearRef = useRef<TextInput>(null);
@@ -266,6 +268,26 @@ export default function ProfileScreen() {
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={Colors.dark.textMuted} />
+          </Pressable>
+        )}
+
+        {/* Upgrade CTA for logged-in non-premium users */}
+        {isLoggedIn && !isPremium && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.upgradeCard,
+              pressed && { opacity: 0.9 },
+            ]}
+            onPress={() => router.push("/paywall")}
+          >
+            <Ionicons name="star" size={24} color={Colors.dark.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.upgradeTitle}>Upgrade to Pro</Text>
+              <Text style={styles.upgradeDesc}>
+                Unlock Custom Friends and premium features.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={Colors.dark.primary} />
           </Pressable>
         )}
 
@@ -1001,6 +1023,29 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   signInDesc: {
+    fontSize: 13,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textSecondary,
+    lineHeight: 18,
+  },
+  upgradeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: Colors.dark.primaryMuted,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.dark.primary + "40",
+  },
+  upgradeTitle: {
+    fontSize: 16,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.text,
+    marginBottom: 3,
+  },
+  upgradeDesc: {
     fontSize: 13,
     fontFamily: "Outfit_400Regular",
     color: Colors.dark.textSecondary,

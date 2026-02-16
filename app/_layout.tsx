@@ -7,6 +7,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider } from "@/lib/AuthContext";
+import { PurchaseProvider } from "@/lib/PurchaseContext";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -30,6 +31,7 @@ function RootLayoutNav() {
       <Stack.Screen name="city-detail" options={{ presentation: "modal" }} />
       <Stack.Screen name="bond-results" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="create-custom-friend" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="paywall" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
     </Stack>
   );
 }
@@ -55,12 +57,14 @@ export default function RootLayout() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <PurchaseProvider>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
               <StatusBar style="light" />
               <RootLayoutNav />
             </KeyboardProvider>
           </GestureHandlerRootView>
+          </PurchaseProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>

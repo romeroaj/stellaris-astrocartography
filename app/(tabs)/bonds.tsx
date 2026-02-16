@@ -24,6 +24,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/AuthContext";
 import { useFriendView } from "@/lib/FriendViewContext";
+import { usePurchase } from "@/lib/PurchaseContext";
 import { authFetch } from "@/lib/auth";
 import { getBigThreeSigns, abbrevSign } from "@/lib/zodiac";
 import { lookupCityCoordinates } from "@/lib/cities";
@@ -73,6 +74,7 @@ type BondType = "synastry" | "composite";
 export default function FriendsBondsScreen() {
     const insets = useSafeAreaInsets();
     const { isLoggedIn } = useAuth();
+    const { isPremium } = usePurchase();
     const [mainTab, setMainTab] = useState<MainTab>("friends");
     const [friendsSubTab, setFriendsSubTab] = useState<FriendsSubTab>("list");
     const [bondType, setBondType] = useState<BondType>("synastry");
@@ -80,7 +82,6 @@ export default function FriendsBondsScreen() {
 
     const [friends, setFriends] = useState<Friend[]>([]);
     const [customFriends, setCustomFriends] = useState<Friend[]>([]);
-    const [isPremium, setIsPremium] = useState(true);
     const [pending, setPending] = useState<PendingRequest[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState<UserResult[]>([]);
@@ -96,10 +97,9 @@ export default function FriendsBondsScreen() {
     const loadFriends = useCallback(async () => {
         setLoading(true);
         try {
-            const [friendsRes, pendingRes, premiumRes, customRes] = await Promise.all([
+            const [friendsRes, pendingRes, customRes] = await Promise.all([
                 authFetch<{ friends: any[] }>("GET", "/api/friends"),
                 authFetch<{ requests: any[] }>("GET", "/api/friends/pending"),
-                authFetch<{ premium: boolean }>("GET", "/api/me/premium"),
                 authFetch<{ customFriends: any[] }>("GET", "/api/custom-friends").catch(() => ({ data: undefined, error: "Failed" })),
             ]);
             const raw = friendsRes.data?.friends || [];
@@ -118,7 +118,6 @@ export default function FriendsBondsScreen() {
                 isCustom: false,
             }));
             setFriends(normalized);
-            setIsPremium(premiumRes.data?.premium ?? true);
             const cfRaw = customRes.data?.customFriends ?? (customRes.error ? [] : []);
             const cfNorm: Friend[] = cfRaw.map((cf: any) => ({
                 id: `custom_${cf.id}`,
@@ -270,7 +269,14 @@ export default function FriendsBondsScreen() {
     const handleCreateCustomFriend = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         if (!isPremium) {
-            Alert.alert("Premium Required", "Custom friends are a premium feature. Upgrade to add birth charts for people without Stellaris accounts.");
+            Alert.alert(
+                "Premium Required",
+                "Custom friends are a premium feature. Upgrade to add birth charts for people without Stellaris accounts.",
+                [
+                    { text: "Not Now", style: "cancel" },
+                    { text: "Upgrade", onPress: () => router.push("/paywall") },
+                ]
+            );
             return;
         }
         router.push("/create-custom-friend");

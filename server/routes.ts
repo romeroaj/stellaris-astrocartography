@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
 import { requireAuth, optionalAuth, type AuthenticatedRequest } from "./auth";
+import { isPremiumSubscriber } from "./revenuecat";
 
 function slugify(input: string): string {
   return input
@@ -29,9 +30,10 @@ const MOCK_USERS_DATA: Record<string, { username: string; displayName: string; e
 // Seeded test users (with birth profiles) — auto-accept friend requests so you can test Bonds
 const TEST_USERNAMES = new Set(["kelsey_wood", "emma_star", "tina_cosmic", "joanna_voyager"]);
 
-/** Premium subscription check. Stub: returns true for dev. Wire to RevenueCat/subscriptions later. */
-function isPremiumUser(_userId: string): boolean {
-  return true;
+/** Premium subscription check via RevenueCat. Falls back to true when RevenueCat is not configured (dev). */
+async function isPremiumUser(userId: string): Promise<boolean> {
+  if (!process.env.REVENUECAT_SECRET_API_KEY) return true; // dev stub
+  return isPremiumSubscriber(userId);
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -428,7 +430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/me/premium", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
-      res.json({ premium: isPremiumUser(req.userId!) });
+      res.json({ premium: await isPremiumUser(req.userId!) });
     } catch {
       res.status(500).json({ error: "Internal server error" });
     }
@@ -436,7 +438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/custom-friends", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
-      if (!isPremiumUser(req.userId!)) {
+      if (!(await isPremiumUser(req.userId!))) {
         return res.status(403).json({ error: "Premium subscription required" });
       }
       const list = await storage.getCustomFriends(req.userId!);
@@ -461,7 +463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/custom-friends", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
-      if (!isPremiumUser(req.userId!)) {
+      if (!(await isPremiumUser(req.userId!))) {
         return res.status(403).json({ error: "Premium subscription required" });
       }
       const { name, birthDate, birthTime, latitude, longitude, locationName } = req.body;
@@ -485,7 +487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/custom-friends/:id", requireAuth as any, async (req: AuthenticatedRequest, res) => {
     try {
-      if (!isPremiumUser(req.userId!)) {
+      if (!(await isPremiumUser(req.userId!))) {
         return res.status(403).json({ error: "Premium subscription required" });
       }
       const id = req.params.id as string;
