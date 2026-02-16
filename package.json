@@ -12,7 +12,7 @@
     "server:prod": "NODE_ENV=production node server_dist/index.js",
     "db:push": "drizzle-kit push",
     "start": "EXPO_PUBLIC_API_URL=http://192.168.4.139:5001 npx expo start",
-    "start:railway": "EXPO_PUBLIC_API_URL=https://stellaris-astrocartography-production.up.railway.app npx expo start --clear",
+    "start:prod": "npx expo start --clear",
     "dev": "npm run server:dev & npm run start",
     "lint": "npx expo lint",
     "lint:fix": "npx expo lint --fix"

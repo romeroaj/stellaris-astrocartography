@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-// Node 18 doesn't have global crypto; jose (JWT) expects it. Polyfill for Railway.
+// Node 18 doesn't have global crypto; jose (JWT) expects it. Polyfill for production.
 import { webcrypto } from "node:crypto";
 if (typeof (globalThis as any).crypto === "undefined") {
   (globalThis as any).crypto = webcrypto;

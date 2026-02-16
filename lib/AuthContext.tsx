@@ -119,16 +119,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
     }, []);
 
-    const refreshUser = useCallback(async () => {
+    const refreshUser = useCallback(async (): Promise<boolean> => {
         const token = await getToken();
         if (!token) {
             setUser(null);
-            return;
+            return false;
         }
         const res = await authFetch<{ user: AuthUser }>("GET", "/api/auth/me");
         if (res.status === 200 && res.data?.user) {
             setUser(res.data.user);
+            return true;
         }
+        if (res.status !== 200 && res.error) {
+            console.warn("[Auth] /api/auth/me failed:", res.status, res.error);
+        }
+        return false;
     }, []);
 
     const updateUser = useCallback((updates: Partial<AuthUser>) => {

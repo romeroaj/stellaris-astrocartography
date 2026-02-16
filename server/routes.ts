@@ -48,33 +48,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let user = await storage.getUser(req.userId!);
       const payload = req.userPayload as any;
 
-      // Supabase first-time: create app user from JWT payload
+      // Supabase first-time: find by email (migrated user) or create new
       if (!user && payload?.user_metadata != null) {
         const email = payload.email ?? null;
-        const name =
-          payload.user_metadata?.full_name ??
-          payload.user_metadata?.name ??
-          (email ? email.split("@")[0] : "User");
-        let username = slugify(name);
-        let existing = await storage.getUserByUsername(username);
-        let suffix = 1;
-        while (existing) {
-          username = slugify(name) + suffix;
-          existing = await storage.getUserByUsername(username);
-          suffix++;
+
+        // Handle migrated users whose ID changed when switching to Supabase auth
+        if (email) {
+          const existingByEmail = await storage.getUserByEmail(email);
+          if (existingByEmail && existingByEmail.id !== req.userId!) {
+            user = await storage.updateUser(existingByEmail.id, {
+              // Reassign to Supabase auth ID handled by caller below
+            }) ?? existingByEmail;
+            // Update the user's ID to match Supabase auth
+            const { db } = await import("./db");
+            const { users: usersTable } = await import("@shared/schema");
+            const { eq } = await import("drizzle-orm");
+            await db.update(usersTable).set({ id: req.userId!, authProviderId: req.userId! }).where(eq(usersTable.id, existingByEmail.id));
+            user = await storage.getUser(req.userId!);
+          }
         }
-        const provider = payload.app_metadata?.provider ?? "supabase";
-        user = await storage.createUser({
-          id: req.userId!,
-          email: email ?? undefined,
-          username,
-          displayName: name,
-          authProvider: provider === "apple" ? "apple" : provider === "google" ? "google" : "email",
-          authProviderId: req.userId!,
-        });
-        if (payload.user_metadata?.avatar_url) {
-          await storage.updateUser(user.id, { avatarUrl: payload.user_metadata.avatar_url });
-          user.avatarUrl = payload.user_metadata.avatar_url;
+
+        if (!user) {
+          const name =
+            payload.user_metadata?.full_name ??
+            payload.user_metadata?.name ??
+            (email ? email.split("@")[0] : "User");
+          let username = slugify(name);
+          let existing = await storage.getUserByUsername(username);
+          let suffix = 1;
+          while (existing) {
+            username = slugify(name) + suffix;
+            existing = await storage.getUserByUsername(username);
+            suffix++;
+          }
+          const provider = payload.app_metadata?.provider ?? "supabase";
+          user = await storage.createUser({
+            id: req.userId!,
+            email: email ?? undefined,
+            username,
+            displayName: name,
+            authProvider: provider === "apple" ? "apple" : provider === "google" ? "google" : "email",
+            authProviderId: req.userId!,
+          });
+          if (payload.user_metadata?.avatar_url) {
+            await storage.updateUser(user.id, { avatarUrl: payload.user_metadata.avatar_url });
+            user.avatarUrl = payload.user_metadata.avatar_url;
+          }
         }
       }
 

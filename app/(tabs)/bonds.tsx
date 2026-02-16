@@ -23,6 +23,7 @@ import * as Contacts from "expo-contacts";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/AuthContext";
+import { useFriendView } from "@/lib/FriendViewContext";
 import { authFetch } from "@/lib/auth";
 import { getBigThreeSigns, abbrevSign } from "@/lib/zodiac";
 import { lookupCityCoordinates } from "@/lib/cities";
@@ -282,14 +283,18 @@ export default function FriendsBondsScreen() {
         router.push({ pathname: "/create-custom-friend", params: { editId: cfId } });
     };
 
+    const { setFriendView } = useFriendView();
+
     const viewFriendChart = (friend: Friend) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        router.replace({ pathname: "/(tabs)", params: { viewFriendId: friend.id, viewFriendName: friend.displayName } });
+        setFriendView(friend.id, friend.displayName);
+        router.navigate("/(tabs)");
     };
 
     const viewFriendInsights = (friend: Friend) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        router.replace({ pathname: "/(tabs)/insights", params: { viewFriendId: friend.id, viewFriendName: friend.displayName } });
+        setFriendView(friend.id, friend.displayName);
+        router.navigate("/(tabs)/insights");
     };
 
     const handleRunBond = () => {
