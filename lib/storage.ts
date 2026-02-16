@@ -6,13 +6,27 @@ const ACTIVE_PROFILE_KEY = "@stellaris_active_profile";
 const FTUX_SEEN_KEY = "@stellaris_ftux_seen";
 const SETTINGS_KEY = "@stellaris_settings";
 
+export type DistanceUnit = "km" | "mi";
+
 export interface AppSettings {
   includeMinorPlanets: boolean;
+  distanceUnit: DistanceUnit;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   includeMinorPlanets: true,
+  distanceUnit: "km",
 };
+
+const KM_TO_MI = 0.621371;
+
+/** Format a distance in km to the user's preferred unit */
+export function formatDistance(km: number, unit: DistanceUnit): string {
+  if (unit === "mi") {
+    return `${Math.round(km * KM_TO_MI)} mi`;
+  }
+  return `${Math.round(km)} km`;
+}
 
 export async function getSettings(): Promise<AppSettings> {
   const data = await AsyncStorage.getItem(SETTINGS_KEY);

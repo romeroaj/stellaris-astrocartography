@@ -15,6 +15,7 @@ import {
 } from "@/lib/astronomy";
 import { getInterpretation, getPlanetIcon } from "@/lib/interpretations";
 import { filterAstroLines } from "@/lib/settings";
+import { formatDistance, DistanceUnit } from "@/lib/storage";
 
 const { width } = Dimensions.get("window");
 
@@ -23,9 +24,10 @@ interface LiveInsightsCardProps {
     birthProfile: BirthData | null;
     onClose: () => void;
     includeMinorPlanets?: boolean;
+    distanceUnit?: DistanceUnit;
 }
 
-export function LiveInsightsCard({ location, birthProfile, onClose, includeMinorPlanets = true }: LiveInsightsCardProps) {
+export function LiveInsightsCard({ location, birthProfile, onClose, includeMinorPlanets = true, distanceUnit = "km" }: LiveInsightsCardProps) {
     const [address, setAddress] = useState<string | null>(null);
     const [loadingAddress, setLoadingAddress] = useState(false);
 
@@ -45,9 +47,9 @@ export function LiveInsightsCard({ location, birthProfile, onClose, includeMinor
         const raw = generateAstroLines(positions, gst);
         const allLines = filterAstroLines(raw, includeMinorPlanets);
 
-        // Find nearest lines within ~200km (approx 2 degrees)
-        // We use a generous radius so the user always sees *something*
-        const nearest = findNearestLines(allLines, location.latitude, location.longitude, 2);
+        // Find nearest lines within ~500km (approx 4.5 degrees)
+        // Covers Jim Lewis's Peak Intensity (282km) + Strong (483km) zones
+        const nearest = findNearestLines(allLines, location.latitude, location.longitude, 5);
 
         return nearest.slice(0, 3); // Top 3 strongest
     }, [location, birthProfile, includeMinorPlanets]);
@@ -138,7 +140,7 @@ export function LiveInsightsCard({ location, birthProfile, onClose, includeMinor
                                                 {line.planet.charAt(0).toUpperCase() + line.planet.slice(1)} {line.lineType}
                                             </Text>
                                             <Text style={styles.lineDistance}>
-                                                {Math.round(line.distance * 111)} km away ({line.influence})
+                                                {formatDistance(line.distance * 111, distanceUnit)} away ({line.influence})
                                             </Text>
                                         </View>
                                     </View>

@@ -1,18 +1,21 @@
 import React, { useEffect, useRef, useCallback } from "react";
 import { View, StyleSheet } from "react-native";
-import { AstroLine } from "@/lib/types";
+import { AstroLine, MapHotspot } from "@/lib/types";
 import Colors from "@/constants/colors";
 import { classifyLine, SENTIMENT_COLORS, SENTIMENT_LABELS } from "@/lib/lineClassification";
 import { OVERLAP_COLORS, OVERLAP_LABELS } from "@/lib/synastryAnalysis";
 
 interface AstroMapProps {
   lines: AstroLine[];
+  hotspots?: MapHotspot[];
   birthLat: number;
   birthLon: number;
   onLinePress?: (line: AstroLine) => void;
   colorMode?: "planet" | "simplified";
+  viewMode?: "simple" | "advanced";
   bondMode?: "synastry" | "composite";
   showOverlapHighlights?: boolean;
+  onHotspotPress?: (hotspot: MapHotspot) => void;
 }
 
 let leafletLoaded = false;
@@ -49,7 +52,18 @@ function getDashArray(lineType: string): string | undefined {
   return dashes[lineType] || undefined;
 }
 
-export default function AstroMap({ lines, birthLat, birthLon, onLinePress, colorMode = "planet", bondMode, showOverlapHighlights }: AstroMapProps) {
+export default function AstroMap({
+  lines,
+  hotspots = [],
+  birthLat,
+  birthLon,
+  onLinePress,
+  colorMode = "planet",
+  viewMode = "advanced",
+  bondMode,
+  showOverlapHighlights,
+  onHotspotPress,
+}: AstroMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const layerGroupRef = useRef<any>(null);
@@ -67,6 +81,12 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
 
   const showOverlapRef = useRef(showOverlapHighlights);
   showOverlapRef.current = showOverlapHighlights;
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
+  const hotspotsRef = useRef(hotspots);
+  hotspotsRef.current = hotspots;
+  const onHotspotPressRef = useRef(onHotspotPress);
+  onHotspotPressRef.current = onHotspotPress;
 
   const updateLines = useCallback(() => {
     const L = (window as any).L;
@@ -76,9 +96,12 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
 
     const isSynOverlap = bondModeRef.current === "synastry" && showOverlapRef.current;
 
-    linesRef.current.forEach((line) => {
+    if (viewModeRef.current === "advanced") {
+      linesRef.current.forEach((line) => {
       let color: string;
-      if (isSynOverlap) {
+      if (line.sourceId === "transit") {
+        color = Colors.dark.secondary + "CC";
+      } else if (isSynOverlap) {
         if (line.isOverlapping && line.overlapClassification) {
           color = OVERLAP_COLORS[line.overlapClassification];
         } else {
@@ -93,8 +116,8 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
       } else {
         color = Colors.planets[line.planet] || "#FFFFFF";
       }
-      const dashArray = getDashArray(line.lineType);
-      let weight = line.lineType === "MC" || line.lineType === "IC" ? 3 : 2.5;
+      const dashArray = line.sourceId === "transit" ? "6 6" : getDashArray(line.lineType);
+      let weight = line.sourceId === "transit" ? 2 : (line.lineType === "MC" || line.lineType === "IC" ? 3 : 2.5);
       if (isSynOverlap) {
         weight = line.isOverlapping ? weight * 1.6 : weight * 0.5;
       } else if (bondModeRef.current === "synastry") {
@@ -143,7 +166,41 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
       });
 
       layerGroupRef.current.addLayer(polyline);
-    });
+      });
+    }
+
+    if (viewModeRef.current === "simple") {
+      hotspotsRef.current.forEach((hotspot) => {
+        const color = hotspot.sentiment === "positive"
+          ? SENTIMENT_COLORS.positive
+          : hotspot.sentiment === "difficult"
+            ? SENTIMENT_COLORS.difficult
+            : SENTIMENT_COLORS.neutral;
+        const size = hotspot.strength >= 0.8 ? 34 : hotspot.strength >= 0.55 ? 30 : 26;
+        const marker = L.marker([hotspot.latitude, hotspot.longitude], {
+          icon: L.divIcon({
+            className: "",
+            html: `<div style="
+              width:${size}px;height:${size}px;border-radius:50%;
+              display:flex;align-items:center;justify-content:center;
+              border:2px solid ${color};
+              background:${Colors.dark.overlay};
+              box-shadow:0 0 12px ${color}66;
+              font-size:14px;
+            ">${hotspot.emoji}</div>`,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+          }),
+        });
+        marker.on("click", () => onHotspotPressRef.current?.(hotspot));
+        marker.bindTooltip(`${hotspot.emoji} ${hotspot.city} · ${hotspot.theme}`, {
+          sticky: true,
+          className: "astro-tooltip",
+          opacity: 0.95,
+        });
+        layerGroupRef.current.addLayer(marker);
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -229,7 +286,7 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
 
   useEffect(() => {
     updateLines();
-  }, [lines, colorMode, bondMode, showOverlapHighlights, updateLines]);
+  }, [lines, hotspots, colorMode, viewMode, bondMode, showOverlapHighlights, updateLines]);
 
   return (
     <View style={styles.webMap}>

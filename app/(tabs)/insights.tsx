@@ -16,8 +16,8 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
-import { BirthData, PlanetName, LineType } from "@/lib/types";
-import { getActiveProfile } from "@/lib/storage";
+import { BirthData, PlanetName, LineType, LineActivation } from "@/lib/types";
+import { getActiveProfile, formatDistance, DistanceUnit } from "@/lib/storage";
 import {
   calculatePlanetPositions,
   calculateGST,
@@ -41,6 +41,8 @@ import { WORLD_CITIES as CITY_LIST } from "@/lib/cities";
 import { getSettings } from "@/lib/storage";
 import { filterAstroLines } from "@/lib/settings";
 import { useFriendView } from "@/lib/FriendViewContext";
+import { getCurrentActivations } from "@/lib/transits";
+import TimeScrubber from "@/components/TimeScrubber";
 
 const KEYWORD_TAGS = [
   "love", "money", "career", "home", "creativity",
@@ -48,8 +50,9 @@ const KEYWORD_TAGS = [
 ];
 
 // ── Signal strength bars (small) ──────────────────────────────────
+// Jim Lewis thresholds: 0-282km=Peak(4), 282-483km=Strong(3), 483-966km=Moderate(2), 966-1287km=Subtle(1)
 function SignalIcon({ distance, color }: { distance: number; color: string }) {
-  const bars = distance < 150 ? 4 : distance < 400 ? 3 : distance < 800 ? 2 : 1;
+  const bars = distance < 282 ? 4 : distance < 483 ? 3 : distance < 966 ? 2 : 1;
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 1.5, height: 14 }}>
       {[1, 2, 3, 4].map((level) => (
@@ -101,6 +104,11 @@ export default function InsightsScreen() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("summary");
   const [keywordFilter, setKeywordFilter] = useState("");
   const [includeMinorPlanets, setIncludeMinorPlanets] = useState(true);
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>("km");
+
+  // Cyclocartography time state
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [activeLines, setActiveLines] = useState<LineActivation[]>([]);
 
   // Explore tab search
   const [searchQuery, setSearchQuery] = useState("");
@@ -128,7 +136,10 @@ export default function InsightsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-      getSettings().then((s) => setIncludeMinorPlanets(s.includeMinorPlanets));
+      getSettings().then((s) => {
+        setIncludeMinorPlanets(s.includeMinorPlanets);
+        setDistanceUnit(s.distanceUnit);
+      });
     }, [effectiveFriendId, effectiveFriendName])
   );
 
@@ -154,6 +165,20 @@ export default function InsightsScreen() {
     setProfile(p);
     setLoading(false);
   };
+
+  // ── Cyclocartography: compute active transits ──
+  useEffect(() => {
+    if (!profile) { setActiveLines([]); return; }
+    try {
+      const activations = getCurrentActivations(
+        profile.date, profile.time, profile.longitude, selectedDate
+      );
+      setActiveLines(activations);
+    } catch (e) {
+      console.error("Error computing activations:", e);
+      setActiveLines([]);
+    }
+  }, [profile, selectedDate]);
 
   const astroLines = useMemo(() => {
     if (!profile) return [];
@@ -207,7 +232,8 @@ export default function InsightsScreen() {
     const results: CityAnalysis[] = [];
 
     for (const city of WORLD_CITIES) {
-      const nearby = findNearestLines(astroLines, city.lat, city.lon, 15);
+      // 12° ≈ 1332 km — covers Jim Lewis's full 800-mile orb
+      const nearby = findNearestLines(astroLines, city.lat, city.lon, 12);
       if (nearby.length === 0) continue;
 
       const lines: CityLineInfo[] = nearby.map((item) => {
@@ -230,12 +256,14 @@ export default function InsightsScreen() {
       const difficultCount = lines.filter((l) => l.sentiment === "difficult").length;
       const neutralCount = lines.filter((l) => l.sentiment === "neutral").length;
 
-      const posProximity = lines
+      // Use exponential decay model for proximity scoring (Jim Lewis distance-strength curve)
+      // strength field from findNearestLines uses the decay model, but we compute here from distance
+      const posStrength = lines
         .filter((l) => l.sentiment === "positive")
-        .reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0);
-      const diffProximity = lines
+        .reduce((acc, l) => acc + Math.exp(-0.693 * l.distance / 310), 0);
+      const diffStrength = lines
         .filter((l) => l.sentiment === "difficult")
-        .reduce((acc, l) => acc + Math.max(0, 1 - l.distance / 1500), 0);
+        .reduce((acc, l) => acc + Math.exp(-0.693 * l.distance / 310), 0);
 
       // East/west side bonus: preferred side boosts positive, softens difficult
       const sideBonus = lines.reduce((acc, l) => {
@@ -248,7 +276,8 @@ export default function InsightsScreen() {
         return acc;
       }, 0);
 
-      const score = positiveCount * 10 + posProximity * 5 - difficultCount * 8 - diffProximity * 4 + sideBonus;
+      // Weighted scoring with decay-based proximity
+      const score = positiveCount * 8 + posStrength * 12 - difficultCount * 6 - diffStrength * 10 + sideBonus;
 
       results.push({ ...city, lines, positiveCount, difficultCount, neutralCount, score });
     }
@@ -396,7 +425,7 @@ export default function InsightsScreen() {
                 <View style={[styles.sidePill, { backgroundColor: sideColor + "18" }]}>
                   <Text style={[styles.sidePillText, { color: sideColor }]}>{sideLabel}</Text>
                 </View>
-                <Text style={styles.cityLineDist}>{Math.round(line.distance)} km</Text>
+                <Text style={styles.cityLineDist}>{formatDistance(line.distance, distanceUnit)}</Text>
               </View>
             );
           })}
@@ -541,6 +570,90 @@ export default function InsightsScreen() {
               </View>
             </View>
           </LinearGradient>
+
+          {/* ── Cyclocartography: Active Lines ── */}
+          <View style={styles.summarySection}>
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="pulse" size={18} color={Colors.dark.secondary} />
+              <Text style={[styles.sectionTitle, { flex: 1 }]}>Active Lines</Text>
+              <View style={styles.activeLinesCount}>
+                <Text style={styles.activeLinesCountText}>{activeLines.length} active</Text>
+              </View>
+            </View>
+            <Text style={styles.sectionDesc}>
+              Lines currently activated by planetary transits. Scrub time to see past and future activations.
+            </Text>
+            <TimeScrubber
+              selectedDate={selectedDate}
+              onDateChange={setSelectedDate}
+              compact={false}
+            />
+            {activeLines.length > 0 ? (
+              <View style={styles.activeLinesList}>
+                {activeLines.slice(0, 6).map((activation, i) => {
+                  const intensityColor = activation.intensity === "exact"
+                    ? Colors.dark.primary
+                    : activation.intensity === "strong"
+                      ? Colors.dark.secondary
+                      : activation.intensity === "moderate"
+                        ? Colors.dark.textSecondary
+                        : Colors.dark.textMuted;
+                  const aspectSymbol = activation.aspect === "conjunction" ? "☌"
+                    : activation.aspect === "opposition" ? "☍"
+                    : activation.aspect === "trine" ? "△"
+                    : activation.aspect === "square" ? "□"
+                    : "⚹";
+                  const sourceLabel = activation.source === "progression" ? "Progressed" : "Transit";
+                  const planetColor = Colors.planets[activation.natalPlanet] || "#FFFFFF";
+
+                  return (
+                    <View key={`${activation.transitPlanet}-${activation.natalPlanet}-${i}`} style={styles.activeLineCard}>
+                      <View style={styles.activeLineHeader}>
+                        <View style={[styles.activeLinePlanetIcon, { backgroundColor: planetColor + "20" }]}>
+                          <Ionicons name={getPlanetIcon(activation.natalPlanet) as any} size={14} color={planetColor} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.activeLineTitle}>
+                            {getPlanetSymbol(activation.natalPlanet)} Lines
+                          </Text>
+                          <Text style={styles.activeLineAspect}>
+                            {sourceLabel} {getPlanetSymbol(activation.transitPlanet)} {aspectSymbol}
+                          </Text>
+                        </View>
+                        <View style={[styles.intensityBadge, { backgroundColor: intensityColor + "18" }]}>
+                          <View style={[styles.intensityDot, { backgroundColor: intensityColor }]} />
+                          <Text style={[styles.intensityText, { color: intensityColor }]}>
+                            {activation.intensity}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.activeLineInsight} numberOfLines={2}>
+                        {activation.insight}
+                      </Text>
+                      {activation.applying && (
+                        <View style={styles.applyingBadge}>
+                          <Ionicons name="arrow-forward" size={10} color={Colors.dark.primary} />
+                          <Text style={styles.applyingText}>Applying — getting stronger</Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+                {activeLines.length > 6 && (
+                  <Text style={styles.moreActivationsText}>
+                    + {activeLines.length - 6} more activations
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <View style={styles.noActiveLines}>
+                <Ionicons name="moon-outline" size={24} color={Colors.dark.textMuted} />
+                <Text style={styles.noActiveLinesText}>
+                  No strong activations for this period. Try scrubbing to a different date.
+                </Text>
+              </View>
+            )}
+          </View>
 
           {/* Search a city */}
           <View style={styles.summarySection}>
@@ -819,4 +932,44 @@ const styles = StyleSheet.create({
   cityFooterText: { fontSize: 12, fontFamily: "Outfit_500Medium", color: Colors.dark.textMuted },
   noResults: { alignItems: "center", gap: 12, paddingVertical: 40 },
   noResultsText: { fontSize: 14, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted, textAlign: "center" },
+  // ── Active Lines (Cyclocartography) ──
+  activeLinesCount: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: Colors.dark.secondaryMuted },
+  activeLinesCountText: { fontSize: 12, fontFamily: "Outfit_600SemiBold", color: Colors.dark.secondary },
+  activeLinesList: { gap: 10, marginTop: 12 },
+  activeLineCard: {
+    backgroundColor: Colors.dark.card, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: Colors.dark.cardBorder,
+  },
+  activeLineHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+  activeLinePlanetIcon: {
+    width: 30, height: 30, borderRadius: 15,
+    alignItems: "center", justifyContent: "center",
+  },
+  activeLineTitle: { fontSize: 14, fontFamily: "Outfit_600SemiBold", color: Colors.dark.text },
+  activeLineAspect: { fontSize: 11, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted, marginTop: 1 },
+  intensityBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+  },
+  intensityDot: { width: 6, height: 6, borderRadius: 3 },
+  intensityText: { fontSize: 11, fontFamily: "Outfit_600SemiBold", textTransform: "capitalize" as const },
+  activeLineInsight: {
+    fontSize: 13, fontFamily: "Outfit_400Regular", color: Colors.dark.textSecondary,
+    lineHeight: 19,
+  },
+  applyingBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    backgroundColor: Colors.dark.primaryMuted, alignSelf: "flex-start",
+  },
+  applyingText: { fontSize: 10, fontFamily: "Outfit_600SemiBold", color: Colors.dark.primary },
+  moreActivationsText: {
+    fontSize: 13, fontFamily: "Outfit_500Medium", color: Colors.dark.textMuted,
+    textAlign: "center", paddingVertical: 8,
+  },
+  noActiveLines: { alignItems: "center", gap: 10, paddingVertical: 24 },
+  noActiveLinesText: {
+    fontSize: 13, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted,
+    textAlign: "center", lineHeight: 19,
+  },
 });

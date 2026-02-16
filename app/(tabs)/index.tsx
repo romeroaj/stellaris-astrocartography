@@ -16,8 +16,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
-import { BirthData, PlanetName, AstroLine, OverlapClassification } from "@/lib/types";
-import { getActiveProfile, getSettings } from "@/lib/storage";
+import { BirthData, PlanetName, AstroLine, OverlapClassification, LineActivation, MapHotspot } from "@/lib/types";
+import { getActiveProfile, getSettings, DistanceUnit } from "@/lib/storage";
 import { filterPlanets, filterAstroLines } from "@/lib/settings";
 import { authFetch } from "@/lib/auth";
 import {
@@ -25,8 +25,11 @@ import {
   calculateGST,
   generateAstroLines,
   computeCompositePositions,
+  findNearestLines,
 } from "@/lib/astronomy";
-import { getPlanetSymbol } from "@/lib/interpretations";
+import { getPlanetSymbol, getPlanetIcon } from "@/lib/interpretations";
+import { getCurrentActivations, getTransitPositions } from "@/lib/transits";
+import TimeScrubber from "@/components/TimeScrubber";
 import {
   classifyLine,
   lineMatchesKeyword,
@@ -46,6 +49,7 @@ import {
   OVERLAP_DESCRIPTIONS,
 } from "@/lib/synastryAnalysis";
 import { useFriendView } from "@/lib/FriendViewContext";
+import { WORLD_CITIES as CITY_LIST } from "@/lib/cities";
 
 const ALL_PLANETS_RAW: PlanetName[] = [
   "sun", "moon", "mercury", "venus", "mars",
@@ -67,6 +71,19 @@ const KEYWORD_TAGS = [
   "spiritual", "travel", "healing", "leadership", "partnerships",
 ];
 
+const THEME_EMOJI: Record<string, string> = {
+  love: "💖",
+  career: "🚀",
+  home: "🏡",
+  creativity: "🎨",
+  luck: "🍀",
+  spiritual: "🔮",
+  travel: "✈️",
+  healing: "💚",
+  leadership: "👑",
+  partnerships: "🤝",
+};
+
 export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
@@ -74,6 +91,7 @@ export default function MapScreen() {
   const [partnerProfile, setPartnerProfile] = useState<BirthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [includeMinorPlanets, setIncludeMinorPlanets] = useState(true);
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>("km");
   const [enabledPlanets, setEnabledPlanets] = useState<Set<PlanetName>>(
     new Set(DEFAULT_PLANETS_RAW)
   );
@@ -125,6 +143,12 @@ export default function MapScreen() {
   const [showLegend, setShowLegend] = useState(false);
   const [simplifiedView, setSimplifiedView] = useState(false);
 
+  // ── Cyclocartography (CCG) state ──
+  const [showTimeMode, setShowTimeMode] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [transitLines, setTransitLines] = useState<AstroLine[]>([]);
+  const [activeActivations, setActiveActivations] = useState<LineActivation[]>([]);
+
   // Advanced filters
   const [showFilters, setShowFilters] = useState(false);
   const [enabledSentiments, setEnabledSentiments] = useState<Set<LineSentiment>>(
@@ -175,7 +199,10 @@ export default function MapScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProfile();
-      getSettings().then((s) => setIncludeMinorPlanets(s.includeMinorPlanets));
+      getSettings().then((s) => {
+        setIncludeMinorPlanets(s.includeMinorPlanets);
+        setDistanceUnit(s.distanceUnit);
+      });
     }, [effectiveFriendId, effectiveFriendName, partnerIdParam, isBondMode])
   );
 
@@ -272,6 +299,40 @@ export default function MapScreen() {
     return filterAstroLines(raw, includeMinorPlanets);
   }, [profile, partnerProfile, includeMinorPlanets, isBondMode, bondTypeParam]);
 
+  // ── Cyclocartography: compute transit overlay lines + activations ──
+  useEffect(() => {
+    if (!showTimeMode || !profile) {
+      setTransitLines([]);
+      setActiveActivations([]);
+      return;
+    }
+    try {
+      // Generate transit lines for the selected date (outer planet positions)
+      const transitPositions = getTransitPositions(selectedDate);
+      // Use a "transit" GST based on the selected date
+      const tYear = selectedDate.getFullYear();
+      const tMonth = selectedDate.getMonth() + 1;
+      const tDay = selectedDate.getDate();
+      const transitGst = calculateGST(tYear, tMonth, tDay, 12, 0);
+
+      // Only show transit lines for outer planets (the slow-moving ones visible on a map)
+      const outerPlanets: PlanetName[] = ["jupiter", "saturn", "uranus", "neptune", "pluto"];
+      const outerPositions = transitPositions.filter((p) => outerPlanets.includes(p.name));
+      const rawTransitLines = generateAstroLines(outerPositions, transitGst);
+      setTransitLines(rawTransitLines);
+
+      // Compute activations
+      const activations = getCurrentActivations(
+        profile.date, profile.time, profile.longitude, selectedDate
+      );
+      setActiveActivations(activations);
+    } catch (e) {
+      console.error("Error computing transit lines:", e);
+      setTransitLines([]);
+      setActiveActivations([]);
+    }
+  }, [showTimeMode, selectedDate, profile]);
+
   // Combined filter: planets AND sentiments AND keywords
   const visibleLines = useMemo(() => {
     // Pre-compute keyword array once outside loop
@@ -313,6 +374,74 @@ export default function MapScreen() {
 
   const processedLines = synastryResult.lines;
 
+  const mapHotspots = useMemo<MapHotspot[]>(() => {
+    if (!profile || isBondMode || !simplifiedView) return [];
+
+    const hotspots: (MapHotspot & { score: number })[] = [];
+    const citySample = CITY_LIST.slice(0, 120);
+
+    for (const city of citySample) {
+      const nearby = findNearestLines(processedLines, city.latitude, city.longitude, 12);
+      if (nearby.length === 0) continue;
+
+      const classified = nearby.map((n) => {
+        const cls = classifyLine(n.planet, n.lineType);
+        return { ...n, sentiment: cls.sentiment, keywords: cls.keywords };
+      });
+
+      const positiveScore = classified
+        .filter((x) => x.sentiment === "positive")
+        .reduce((acc, x) => acc + x.strength, 0);
+      const difficultScore = classified
+        .filter((x) => x.sentiment === "difficult")
+        .reduce((acc, x) => acc + x.strength, 0);
+
+      const sentiment = positiveScore > difficultScore * 1.2
+        ? "positive"
+        : difficultScore > positiveScore * 1.2
+          ? "difficult"
+          : "neutral";
+
+      const dominant = classified[0];
+      const theme = dominant.keywords.find((k) => KEYWORD_TAGS.some((tag) => k.includes(tag))) || "general";
+      const emoji = THEME_EMOJI[KEYWORD_TAGS.find((k) => theme.includes(k)) || ""] || "✨";
+
+      const transitHits = activeActivations.filter((a) => classified.some((n) => n.planet === a.natalPlanet));
+      const isTransitActive = transitHits.length > 0;
+
+      const strength = Math.min(
+        1,
+        dominant.strength + (isTransitActive ? 0.15 : 0)
+      );
+
+      const details = `${city.name}, ${city.country} · ${theme} · ${
+        sentiment === "positive" ? "supportive" : sentiment === "difficult" ? "challenging" : "mixed"
+      }`;
+
+      const score = strength + (sentiment === "positive" ? 0.2 : sentiment === "difficult" ? 0.05 : 0.1) + (isTransitActive ? 0.2 : 0);
+
+      hotspots.push({
+        id: `${city.name}-${city.country}`,
+        city: city.name,
+        country: city.country,
+        latitude: city.latitude,
+        longitude: city.longitude,
+        sentiment,
+        strength,
+        emoji,
+        theme,
+        isTransitActive,
+        details,
+        score,
+      });
+    }
+
+    return hotspots
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 18)
+      .map(({ score, ...rest }) => rest);
+  }, [profile, isBondMode, simplifiedView, processedLines, activeActivations]);
+
   useEffect(() => {
     setSynastryOverlaps(synastryResult.overlaps);
   }, [synastryResult.overlaps]);
@@ -329,14 +458,25 @@ export default function MapScreen() {
     }
   }, [params.planet, params.lineType, processedLines]);
 
+  // Merge transit overlay lines when time mode is active
+  const allMapLines = useMemo(() => {
+    if (!showTimeMode || transitLines.length === 0) return processedLines;
+    // Mark transit lines with sourceId so map can style them distinctly
+    const markedTransit = transitLines.map((line) => ({
+      ...line,
+      sourceId: "transit" as const,
+    }));
+    return [...processedLines, ...markedTransit];
+  }, [processedLines, transitLines, showTimeMode]);
+
   // Debounce lines sent to the map to prevent native crash from rapid Polyline updates
   const [debouncedLines, setDebouncedLines] = useState<AstroLine[]>([]);
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedLines(processedLines);
+      setDebouncedLines(allMapLines);
     }, 80);
     return () => clearTimeout(timer);
-  }, [processedLines]);
+  }, [allMapLines]);
 
   const hasActiveFilters = enabledSentiments.size < ALL_SENTIMENTS.length || enabledKeywords.size > 0;
 
@@ -442,17 +582,35 @@ export default function MapScreen() {
     <View style={styles.container}>
       <AstroMap
         lines={debouncedLines}
+        hotspots={mapHotspots}
         birthLat={profile.latitude}
         birthLon={profile.longitude}
         userLat={initialGps?.latitude ?? userLocation?.latitude}
         userLon={initialGps?.longitude ?? userLocation?.longitude}
         showUserLocation={!!(userLocation || initialGps)}
         colorMode={simplifiedView ? "simplified" : "planet"}
+        viewMode={simplifiedView ? "simple" : "advanced"}
         bondMode={isBondMode && partnerProfile ? bondTypeParam : undefined}
         showOverlapHighlights={showOverlapHighlights}
         onLinePress={(line) => {
+          if (line.sourceId === "transit") {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            return;
+          }
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           setSelectedLine(line);
+        }}
+        onHotspotPress={(hotspot) => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push({
+            pathname: "/city-detail",
+            params: {
+              name: hotspot.city,
+              country: hotspot.country,
+              lat: String(hotspot.latitude),
+              lon: String(hotspot.longitude),
+            },
+          });
         }}
       />
 
@@ -531,9 +689,32 @@ export default function MapScreen() {
               }}
             >
               <Ionicons
-                name={simplifiedView ? "color-palette" : "color-palette-outline"}
+                name={simplifiedView ? "sparkles" : "analytics-outline"}
                 size={22}
                 color={simplifiedView ? Colors.dark.primary : Colors.dark.textSecondary}
+              />
+            </Pressable>
+
+            {/* CCG Time Mode Button */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.helpButton,
+                pressed && { opacity: 0.7 },
+                showTimeMode && styles.helpButtonActive,
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowTimeMode(!showTimeMode);
+                if (showTimeMode) {
+                  setTransitLines([]);
+                  setActiveActivations([]);
+                }
+              }}
+            >
+              <Ionicons
+                name={showTimeMode ? "time" : "time-outline"}
+                size={20}
+                color={showTimeMode ? Colors.dark.primary : Colors.dark.textSecondary}
               />
             </Pressable>
 
@@ -603,7 +784,68 @@ export default function MapScreen() {
             </Pressable>
           </View>
         </View>
+        <View style={styles.modeBanner}>
+          <Ionicons
+            name={simplifiedView ? "sparkles" : "analytics-outline"}
+            size={13}
+            color={simplifiedView ? Colors.dark.primary : Colors.dark.textSecondary}
+          />
+          <Text style={styles.modeBannerText}>
+            {simplifiedView
+              ? "Simple Mode: Hotspots only (tap areas for details)"
+              : "Advanced Mode: Full natal + transit lines"}
+          </Text>
+        </View>
       </View>
+
+      {/* ── CCG Time Panel ── */}
+      {showTimeMode && !showFilters && (
+        <View style={[styles.ccgPanel, { top: panelTopOffset }]}>
+          <TimeScrubber
+            selectedDate={selectedDate}
+            onDateChange={setSelectedDate}
+            compact={false}
+          />
+          {activeActivations.length > 0 && (
+            <View style={styles.ccgActivationSummary}>
+              <Text style={styles.ccgActivationTitle}>
+                {activeActivations.length} line{activeActivations.length !== 1 ? "s" : ""} activated
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ccgChips}>
+                {activeActivations.slice(0, 5).map((a, i) => {
+                  const planetColor = Colors.planets[a.natalPlanet] || "#FFF";
+                  const intensityOpacity = a.intensity === "exact" ? "FF"
+                    : a.intensity === "strong" ? "CC"
+                    : a.intensity === "moderate" ? "88" : "55";
+                  return (
+                    <View key={`${a.transitPlanet}-${a.natalPlanet}-${i}`} style={[styles.ccgChip, { borderColor: planetColor + intensityOpacity }]}>
+                      <View style={[styles.ccgChipDot, { backgroundColor: planetColor }]} />
+                      <Text style={[styles.ccgChipText, { color: planetColor }]}>
+                        {getPlanetSymbol(a.transitPlanet)} → {getPlanetSymbol(a.natalPlanet)}
+                      </Text>
+                      <Text style={[styles.ccgChipIntensity, { color: planetColor + "AA" }]}>
+                        {a.intensity}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+          {transitLines.length > 0 && !simplifiedView && (
+            <View style={styles.ccgTransitKey}>
+              <View style={styles.ccgKeyDot} />
+              <Text style={styles.ccgKeyText}>Dotted lines = current transit positions</Text>
+            </View>
+          )}
+          {simplifiedView && (
+            <View style={styles.ccgTransitKey}>
+              <View style={[styles.ccgChipDot, { backgroundColor: Colors.dark.primary }]} />
+              <Text style={styles.ccgKeyText}>Simple mode highlights city hotspots, not full transit lines</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* ── Filter Panel ── */}
       {showFilters && (
@@ -971,6 +1213,7 @@ export default function MapScreen() {
           birthProfile={profile}
           onClose={() => setShowInsights(false)}
           includeMinorPlanets={includeMinorPlanets}
+          distanceUnit={distanceUnit}
         />
       )}
     </View>
@@ -1032,6 +1275,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
   },
+  modeBanner: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.dark.overlay,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+  },
+  modeBannerText: {
+    fontSize: 11,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.textSecondary,
+  },
   headerTitle: {
     fontSize: 18,
     fontFamily: "Outfit_700Bold",
@@ -1078,6 +1339,76 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "rgba(0,0,0,0.2)",
     zIndex: 20,
+  },
+  // ── CCG Time Panel ──
+  ccgPanel: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    zIndex: 25,
+    gap: 8,
+  },
+  ccgActivationSummary: {
+    backgroundColor: Colors.dark.card,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+  },
+  ccgActivationTitle: {
+    fontSize: 13,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.text,
+    marginBottom: 8,
+  },
+  ccgChips: {
+    gap: 6,
+  },
+  ccgChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.dark.surface,
+    borderWidth: 1,
+  },
+  ccgChipDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  ccgChipText: {
+    fontSize: 12,
+    fontFamily: "Outfit_600SemiBold",
+  },
+  ccgChipIntensity: {
+    fontSize: 10,
+    fontFamily: "Outfit_500Medium",
+    textTransform: "capitalize" as const,
+  },
+  ccgTransitKey: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.dark.card + "EE",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: "flex-start",
+  },
+  ccgKeyDot: {
+    width: 16,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: Colors.dark.secondary,
+    borderStyle: "dashed" as any,
+  },
+  ccgKeyText: {
+    fontSize: 11,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textMuted,
   },
   // ── Filter Panel ──
   filterPanel: {

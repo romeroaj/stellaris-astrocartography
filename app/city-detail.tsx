@@ -14,14 +14,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
-import { PlanetName, LineType, BirthData } from "@/lib/types";
+import { PlanetName, LineType, BirthData, CityActivation, LineActivation, ActivationWindow } from "@/lib/types";
 import {
   getInterpretation,
   getPlanetSymbol,
   getPlanetIcon,
   getSideOfLineInfo,
 } from "@/lib/interpretations";
-import { getActiveProfile } from "@/lib/storage";
+import { getActiveProfile, formatDistance, DistanceUnit } from "@/lib/storage";
 import { fetchFriendProfile } from "@/lib/friendProfile";
 import {
   calculatePlanetPositions,
@@ -38,11 +38,14 @@ import {
   LineSentiment,
 } from "@/lib/lineClassification";
 import { useFocusEffect } from "expo-router";
+import { getCityActivation } from "@/lib/transits";
+import TimeScrubber from "@/components/TimeScrubber";
 
 // ── Signal strength bars ──────────────────────────────────────────
+// Jim Lewis thresholds: 0-282km=Peak(4), 282-483km=Strong(3), 483-966km=Moderate(2), 966-1287km=Subtle(1)
 function SignalBars({ distance, color }: { distance: number; color: string }) {
-  const bars = distance < 150 ? 4 : distance < 400 ? 3 : distance < 800 ? 2 : 1;
-  const label = distance < 150 ? "Very Strong" : distance < 400 ? "Strong" : distance < 800 ? "Moderate" : "Mild";
+  const bars = distance < 282 ? 4 : distance < 483 ? 3 : distance < 966 ? 2 : 1;
+  const label = distance < 282 ? "Peak" : distance < 483 ? "Strong" : distance < 966 ? "Moderate" : "Subtle";
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 2, height: 16 }}>
@@ -119,12 +122,34 @@ export default function CityDetailScreen() {
   const [lines, setLines] = React.useState<CityLine[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [includeMinorPlanets, setIncludeMinorPlanets] = React.useState(true);
+  const [distanceUnit, setDistanceUnit] = React.useState<DistanceUnit>("km");
+  const [cityActivation, setCityActivation] = React.useState<CityActivation | null>(null);
+  const [selectedDate, setSelectedDate] = React.useState(new Date());
 
   useFocusEffect(
     React.useCallback(() => {
       analyze();
     }, [name, lat, lon, friendId, friendName])
   );
+
+  // Re-compute activations when date changes (without re-analyzing all lines)
+  React.useEffect(() => {
+    if (!lat || !lon || loading) return;
+    const recomputeActivation = async () => {
+      try {
+        const profile = await getActiveProfile();
+        if (!profile) return;
+        const activation = getCityActivation(
+          name || "", parseFloat(lat), parseFloat(lon),
+          profile.date, profile.time, profile.longitude, selectedDate
+        );
+        setCityActivation(activation);
+      } catch (e) {
+        console.error("Error recomputing city activation:", e);
+      }
+    };
+    recomputeActivation();
+  }, [selectedDate]);
 
   const analyze = async () => {
     if (!lat || !lon) { setLoading(false); return; }
@@ -140,6 +165,7 @@ export default function CityDetailScreen() {
       const s = await getSettings();
       if (!profile) { setLoading(false); return; }
       setIncludeMinorPlanets(s.includeMinorPlanets);
+      setDistanceUnit(s.distanceUnit);
 
       const [year, month, day] = profile.date.split("-").map(Number);
       const [hour, minute] = profile.time.split(":").map(Number);
@@ -167,6 +193,17 @@ export default function CityDetailScreen() {
       });
 
       setLines(cityLines);
+
+      // Compute cyclocartography activation for this city
+      try {
+        const activation = getCityActivation(
+          name || "", parseFloat(lat), parseFloat(lon),
+          profile.date, profile.time, profile.longitude, selectedDate
+        );
+        setCityActivation(activation);
+      } catch (e) {
+        console.error("Error computing city activation:", e);
+      }
     } catch (e) {
       console.error("Error analyzing city:", e);
     } finally {
@@ -247,7 +284,7 @@ export default function CityDetailScreen() {
                   <Text style={styles.lineName}>
                     {getPlanetSymbol(line.planet)} {Colors.lineTypes[line.lineType]?.label}
                   </Text>
-                  <Text style={styles.lineDist}>{Math.round(line.distance)} km away</Text>
+                  <Text style={styles.lineDist}>{formatDistance(line.distance, distanceUnit)} away</Text>
                 </View>
                 <SignalBars distance={line.distance} color={sentColor} />
               </View>
@@ -356,6 +393,128 @@ export default function CityDetailScreen() {
               <Text style={[styles.mapBtnText, { color: vibeColor }]}>Show on Map</Text>
             </Pressable>
           </LinearGradient>
+
+          {/* ── Cyclocartography: Transit Activation ── */}
+          {cityActivation && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="pulse" size={18} color={Colors.dark.secondary} />
+                <Text style={[styles.sectionTitle, { color: Colors.dark.secondary }]}>
+                  Cosmic Timing
+                </Text>
+                <View style={[
+                  styles.activationBadge,
+                  {
+                    backgroundColor: cityActivation.activationStrength === "peak" ? Colors.dark.primary + "20"
+                      : cityActivation.activationStrength === "active" ? Colors.dark.secondary + "20"
+                      : cityActivation.activationStrength === "building" ? Colors.dark.textSecondary + "20"
+                      : Colors.dark.textMuted + "20",
+                  },
+                ]}>
+                  <View style={[
+                    styles.activationDot,
+                    {
+                      backgroundColor: cityActivation.activationStrength === "peak" ? Colors.dark.primary
+                        : cityActivation.activationStrength === "active" ? Colors.dark.secondary
+                        : cityActivation.activationStrength === "building" ? Colors.dark.textSecondary
+                        : Colors.dark.textMuted,
+                    },
+                  ]} />
+                  <Text style={[
+                    styles.activationBadgeText,
+                    {
+                      color: cityActivation.activationStrength === "peak" ? Colors.dark.primary
+                        : cityActivation.activationStrength === "active" ? Colors.dark.secondary
+                        : cityActivation.activationStrength === "building" ? Colors.dark.textSecondary
+                        : Colors.dark.textMuted,
+                    },
+                  ]}>
+                    {cityActivation.activationStrength === "peak" ? "Peak Activation"
+                      : cityActivation.activationStrength === "active" ? "Active"
+                      : cityActivation.activationStrength === "building" ? "Building"
+                      : "Quiet"}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.sectionDesc}>
+                {cityActivation.activationStrength === "peak"
+                  ? "This city's energy is at its strongest right now — an exceptional time to engage with it."
+                  : cityActivation.activationStrength === "active"
+                    ? "Transits are activating your lines near this city — heightened energy and significance."
+                    : cityActivation.activationStrength === "building"
+                      ? "Energy is building here — approaching a more significant period."
+                      : "No major transits activating this city's lines right now."}
+              </Text>
+
+              <TimeScrubber
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+                compact
+              />
+
+              {/* Active transits for this city */}
+              {cityActivation.activeTransits.length > 0 && (
+                <View style={styles.cityTransitList}>
+                  {cityActivation.activeTransits.slice(0, 4).map((transit, i) => {
+                    const planetColor = Colors.planets[transit.natalPlanet] || "#FFFFFF";
+                    const intensityColor = transit.intensity === "exact" ? Colors.dark.primary
+                      : transit.intensity === "strong" ? Colors.dark.secondary
+                      : Colors.dark.textSecondary;
+
+                    return (
+                      <View key={`${transit.transitPlanet}-${transit.natalPlanet}-${i}`} style={styles.cityTransitCard}>
+                        <View style={[styles.cityTransitDot, { backgroundColor: intensityColor }]} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.cityTransitTitle}>
+                            {getPlanetSymbol(transit.transitPlanet)} → {getPlanetSymbol(transit.natalPlanet)} Lines
+                          </Text>
+                          <Text style={styles.cityTransitDesc} numberOfLines={2}>
+                            {transit.insight}
+                          </Text>
+                        </View>
+                        <Text style={[styles.cityTransitIntensity, { color: intensityColor }]}>
+                          {transit.intensity}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Best time to visit */}
+              {cityActivation.bestVisitWindow && (
+                <View style={styles.bestVisitCard}>
+                  <Ionicons name="calendar-outline" size={16} color={Colors.dark.success} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.bestVisitTitle}>Best Time to Visit</Text>
+                    <Text style={styles.bestVisitDates}>
+                      {cityActivation.bestVisitWindow.startDate} — {cityActivation.bestVisitWindow.endDate}
+                    </Text>
+                    <Text style={styles.bestVisitDesc}>
+                      {cityActivation.bestVisitWindow.peakDescription}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Next activation */}
+              {cityActivation.nextActivation && !cityActivation.bestVisitWindow && (
+                <View style={styles.nextActivationCard}>
+                  <Ionicons name="time-outline" size={16} color={Colors.dark.textSecondary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.nextActivationTitle}>Next Activation</Text>
+                    <Text style={styles.nextActivationDates}>
+                      {cityActivation.nextActivation.startDate} — {cityActivation.nextActivation.endDate}
+                    </Text>
+                    <Text style={styles.nextActivationDesc}>
+                      {cityActivation.nextActivation.peakDescription}
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* ── Top themes ── */}
           {topThemes.length > 0 && (
@@ -632,5 +791,114 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
     paddingHorizontal: 20,
+  },
+  // ── Cyclocartography: Transit Activation ──
+  activationBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  activationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  activationBadgeText: {
+    fontSize: 11,
+    fontFamily: "Outfit_600SemiBold",
+  },
+  cityTransitList: {
+    gap: 8,
+    marginTop: 12,
+  },
+  cityTransitCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 10,
+    padding: 12,
+  },
+  cityTransitDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 5,
+  },
+  cityTransitTitle: {
+    fontSize: 13,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.text,
+    marginBottom: 2,
+  },
+  cityTransitDesc: {
+    fontSize: 12,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textSecondary,
+    lineHeight: 17,
+  },
+  cityTransitIntensity: {
+    fontSize: 10,
+    fontFamily: "Outfit_700Bold",
+    textTransform: "capitalize" as const,
+  },
+  bestVisitCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: Colors.dark.success + "10",
+    borderWidth: 1,
+    borderColor: Colors.dark.success + "30",
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+  },
+  bestVisitTitle: {
+    fontSize: 14,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.success,
+    marginBottom: 2,
+  },
+  bestVisitDates: {
+    fontSize: 13,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.text,
+    marginBottom: 4,
+  },
+  bestVisitDesc: {
+    fontSize: 12,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textSecondary,
+    lineHeight: 17,
+  },
+  nextActivationCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+  },
+  nextActivationTitle: {
+    fontSize: 14,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.textSecondary,
+    marginBottom: 2,
+  },
+  nextActivationDates: {
+    fontSize: 13,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.text,
+    marginBottom: 4,
+  },
+  nextActivationDesc: {
+    fontSize: 12,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.textSecondary,
+    lineHeight: 17,
   },
 });
