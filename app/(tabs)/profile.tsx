@@ -36,7 +36,7 @@ export default function ProfileScreen() {
   const [profiles, setProfiles] = useState<BirthData[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [settings, setSettingsState] = useState<AppSettings>({ includeMinorPlanets: true });
+  const [settings, setSettingsState] = useState<AppSettings>({ includeMinorPlanets: true, distanceUnit: "km" });
 
   const [editProfile, setEditProfile] = useState<BirthData | null>(null);
   const [editName, setEditName] = useState("");
@@ -80,6 +80,13 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await setSettings({ includeMinorPlanets: next });
     setSettingsState((prev) => ({ ...prev, includeMinorPlanets: next }));
+  };
+
+  const toggleDistanceUnit = async () => {
+    const next = settings.distanceUnit === "km" ? "mi" as const : "km" as const;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await setSettings({ distanceUnit: next });
+    setSettingsState((prev) => ({ ...prev, distanceUnit: next }));
   };
 
   const openEdit = (profile: BirthData) => {
@@ -397,6 +404,29 @@ export default function ProfileScreen() {
                   settings.includeMinorPlanets && styles.toggleThumbActive,
                 ]}
               />
+            </Pressable>
+          </View>
+
+          <View style={[styles.settingsRow, { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: Colors.dark.cardBorder }]}>
+            <View style={styles.settingsRowLeft}>
+              <Ionicons name="speedometer-outline" size={20} color={Colors.dark.textSecondary} />
+              <View>
+                <Text style={styles.settingsLabel}>Distance Unit</Text>
+                <Text style={styles.settingsDesc}>
+                  {settings.distanceUnit === "km" ? "Kilometers (km)" : "Miles (mi)"}
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              style={styles.unitToggle}
+              onPress={toggleDistanceUnit}
+            >
+              <View style={[styles.unitOption, settings.distanceUnit === "km" && styles.unitOptionActive]}>
+                <Text style={[styles.unitOptionText, settings.distanceUnit === "km" && styles.unitOptionTextActive]}>km</Text>
+              </View>
+              <View style={[styles.unitOption, settings.distanceUnit === "mi" && styles.unitOptionActive]}>
+                <Text style={[styles.unitOptionText, settings.distanceUnit === "mi" && styles.unitOptionTextActive]}>mi</Text>
+              </View>
             </Pressable>
           </View>
         </View>
@@ -1055,6 +1085,29 @@ const styles = StyleSheet.create({
   },
   toggleThumbActive: {
     alignSelf: "flex-end",
+  },
+  unitToggle: {
+    flexDirection: "row",
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+  },
+  unitOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: "transparent",
+  },
+  unitOptionActive: {
+    backgroundColor: Colors.dark.primary,
+  },
+  unitOptionText: {
+    fontSize: 13,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.textMuted,
+  },
+  unitOptionTextActive: {
+    color: "#fff",
   },
   sectionTitle: {
     fontSize: 18,

@@ -195,11 +195,44 @@ For inner planets (Sun through Mars), we use **progressions** because they trans
 - **Transit overlays on map** — show transiting planet lines alongside natal lines in a different style (dotted, different color family)
 
 ### Technical Complexity Estimate
-- Phase 1: ~2 days (extend astronomy engine, add progression math)
-- Phase 2: ~3 days (UI components, integration with existing insights/map)
+- Phase 1: ~2 days (extend astronomy engine, add progression math) ✅ DONE
+- Phase 2: ~3 days (UI components, integration with existing insights/map) ✅ DONE (core)
 - Phase 3: ~2 days (push notification setup, subscription gating)
 - Phase 4: ~3 days (timeline animation, calendar visualization)
 - **Total: ~10 days** for full cyclocartography feature
+
+### ✅ Implemented (Phase 1 + 2 Core)
+
+**Transit Engine** (`lib/transits.ts`):
+- `getTransitPositions()` — calculate any planet's position for any date
+- `getProgressedPositions()` — secondary progressions (1 day = 1 year of life)
+- `findTransitAspects()` — detect conjunction, opposition, trine, square, sextile between transit/progressed and natal positions
+- `getCurrentActivations()` — get all currently active line activations with intensity + insights
+- `findActivationWindows()` — scan date ranges to find activation periods
+- `getCityActivation()` — per-city transit info including "best time to visit"
+- `findImportantDates()` — surface significant dates without daily-horoscope overload (max ~3/month)
+
+**TimeScrubber Component** (`components/TimeScrubber.tsx`):
+- Horizontal month timeline with tap-to-select
+- Quick jump buttons: Today, +1M, +3M, +6M, +1Y
+- Month/year navigation with prev/next arrows
+- Jump-to-date modal with year selector + month grid
+- Compact mode for inline use (city detail)
+- Activation intensity heatmap dots on months
+
+**Insights Tab — Active Lines Section**:
+- Shows all currently activated natal lines with transit/progression info
+- Intensity badges (exact, strong, moderate, fading)
+- Per-activation insights (what it means, what to do)
+- "Applying" indicator when aspect is getting stronger
+- Full TimeScrubber for time navigation
+
+**City Detail — Cosmic Timing Section**:
+- Overall activation strength badge (Peak, Active, Building, Quiet)
+- Compact TimeScrubber for date navigation
+- Per-city transit list showing which lines are activated
+- "Best Time to Visit" card with date range + description
+- "Next Activation" fallback when no current transits
 
 ### Why This Is the Subscription Killer Feature
 1. **Daily/weekly engagement** — "What's active on my map right now?" gives users a reason to open the app constantly
@@ -207,6 +240,40 @@ For inner planets (Sun through Mars), we use **progressions** because they trans
 3. **Travel planning utility** — "When is the best time to visit Paris?" is incredibly actionable
 4. **Always changing** — unlike static natal lines, transits ensure fresh content every time the user opens the app
 5. **Natural paywall** — free users see that lines are activating but need to subscribe for details
+
+---
+
+## Notifications & Important Dates (Phase 3 — Next Up)
+
+The transit engine already computes `findImportantDates()` — the remaining work is connecting it to push notifications and building the notification preferences UI.
+
+### Smart Notification System
+
+Unlike daily horoscopes that become noise, Stellaris notifications are **rare, specific, and actionable**:
+
+| Notification Type | Frequency | Example |
+|-------------------|-----------|---------|
+| **Major transit alert** | 2-4x/year | "Jupiter is crossing your Venus line this month — Lisbon enters a lucky window for love and money" |
+| **Best time to travel** | Monthly digest | "March's best cities for you: Tokyo (Venus activation), Barcelona (Jupiter trine)" |
+| **Activation starting** | When a new window opens | "Your Sun lines just lit up — career energy peaks in New York through April" |
+| **Important date reminder** | 1-2 days before exact aspect | "Tomorrow: Saturn conjuncts your Moon. Emotional resilience matters in these cities." |
+
+### Design Principles for Notifications
+- **Max 2-3 per month** — the `findImportantDates()` function already enforces this limit
+- **Always tied to a location** — "Jupiter crossing your Venus line" → "…and here's where that matters: Lisbon, Porto, Marrakech"
+- **Actionable** — every notification should tell you what to *do* (visit, plan, be aware, avoid)
+- **Not a daily horoscope** — if someone gets a notification every day, the system has failed
+
+### Vacation & Travel Planning Mode (Future)
+- "When should I visit [City]?" — shows the next 12 months of activation windows ranked by positivity
+- "Where should I travel in [Month]?" — reverse lookup: given a date, which cities have the best transits
+- Shareable travel recommendations: "The stars say you should visit Bali in September — here's why"
+
+### Important Dates Calendar View (Future)
+- Year-at-a-glance heatmap showing activation intensity per month
+- Tap a month to see which cities are "lit up" and why
+- Categories: Travel, Career, Love, Growth, Caution
+- Export to device calendar
 
 ---
 

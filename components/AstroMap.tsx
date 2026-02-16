@@ -1,13 +1,14 @@
 import React from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View, Text } from "react-native";
 import MapView, { Polyline, Marker, PROVIDER_DEFAULT, Region } from "react-native-maps";
-import { AstroLine, PlanetName } from "@/lib/types";
+import { AstroLine, MapHotspot } from "@/lib/types";
 import Colors from "@/constants/colors";
 import { classifyLine, SENTIMENT_COLORS } from "@/lib/lineClassification";
 import { OVERLAP_COLORS } from "@/lib/synastryAnalysis";
 
 interface AstroMapProps {
   lines: AstroLine[];
+  hotspots?: MapHotspot[];
   birthLat: number;
   birthLon: number;
   userLat?: number | null;
@@ -16,10 +17,12 @@ interface AstroMapProps {
   showUserLocation?: boolean;
   onLinePress?: (line: AstroLine) => void;
   colorMode?: "planet" | "simplified";
+  viewMode?: "simple" | "advanced";
   /** When in Synastry bond mode: color lines by user vs partner */
   bondMode?: "synastry" | "composite";
   /** When true, highlight overlapping synastry lines and fade the rest */
   showOverlapHighlights?: boolean;
+  onHotspotPress?: (hotspot: MapHotspot) => void;
 }
 
 // Persist region across remounts so navigating away and back doesn't reset the view
@@ -32,7 +35,21 @@ const DEFAULT_REGION: Region = {
   longitudeDelta: 180,
 };
 
-export default function AstroMap({ lines, birthLat, birthLon, userLat, userLon, showUserLocation, onLinePress, colorMode = "planet", bondMode, showOverlapHighlights }: AstroMapProps) {
+export default function AstroMap({
+  lines,
+  hotspots = [],
+  birthLat,
+  birthLon,
+  userLat,
+  userLon,
+  showUserLocation,
+  onLinePress,
+  colorMode = "planet",
+  viewMode = "advanced",
+  bondMode,
+  showOverlapHighlights,
+  onHotspotPress,
+}: AstroMapProps) {
   // Priority: 1) saved region (user already panned), 2) GPS, 3) birth location, 4) default
   const initialRegion = React.useMemo(() => {
     if (savedRegion) return savedRegion;
@@ -47,6 +64,9 @@ export default function AstroMap({ lines, birthLat, birthLon, userLat, userLon, 
   const isSynastryOverlap = bondMode === "synastry" && showOverlapHighlights;
 
   const getColor = (line: AstroLine): string => {
+    if (line.sourceId === "transit") {
+      return Colors.dark.secondary + "CC";
+    }
     // Synastry overlap highlight mode
     if (isSynastryOverlap) {
       if (line.isOverlapping && line.overlapClassification) {
@@ -69,6 +89,9 @@ export default function AstroMap({ lines, birthLat, birthLon, userLat, userLon, 
   };
 
   const getStrokeWidth = (line: AstroLine): number => {
+    if (line.sourceId === "transit") {
+      return 1.5;
+    }
     const base = line.lineType === "MC" || line.lineType === "IC" ? 2.5 : 2;
     if (isSynastryOverlap) {
       return line.isOverlapping ? base * 1.4 : base * 0.5;
@@ -89,10 +112,10 @@ export default function AstroMap({ lines, birthLat, birthLon, userLat, userLon, 
       userInterfaceStyle="dark"
       showsUserLocation={!!showUserLocation}
     >
-      {lines.map((line, idx) => {
+      {viewMode === "advanced" && lines.map((line, idx) => {
         const color = getColor(line);
         const lt = Colors.lineTypes[line.lineType];
-        const dash = lt ? lt.dash : [];
+        const dash = line.sourceId === "transit" ? [6, 6] : (lt ? lt.dash : []);
         const strokeWidth = getStrokeWidth(line);
         return (
           <Polyline
@@ -103,8 +126,37 @@ export default function AstroMap({ lines, birthLat, birthLon, userLat, userLon, 
             lineDashPattern={dash}
             tappable={!!onLinePress}
             onPress={() => onLinePress?.(line)}
-            zIndex={isSynastryOverlap && line.isOverlapping ? 10 : bondMode === "synastry" ? 1 : 0}
+            zIndex={line.sourceId === "transit" ? 2 : (isSynastryOverlap && line.isOverlapping ? 10 : bondMode === "synastry" ? 1 : 0)}
           />
+        );
+      })}
+      {viewMode === "simple" && hotspots.map((hotspot) => {
+        const markerColor = hotspot.sentiment === "positive"
+          ? SENTIMENT_COLORS.positive
+          : hotspot.sentiment === "difficult"
+            ? SENTIMENT_COLORS.difficult
+            : SENTIMENT_COLORS.neutral;
+        const size = hotspot.strength >= 0.8 ? 34 : hotspot.strength >= 0.55 ? 30 : 26;
+        return (
+          <Marker
+            key={hotspot.id}
+            coordinate={{ latitude: hotspot.latitude, longitude: hotspot.longitude }}
+            title={`${hotspot.emoji} ${hotspot.city}`}
+            description={hotspot.details}
+            onPress={() => onHotspotPress?.(hotspot)}
+          >
+            <View style={[
+              styles.hotspotMarker,
+              {
+                width: size,
+                height: size,
+                borderRadius: size / 2,
+                borderColor: markerColor,
+              },
+            ]}>
+              <Text style={styles.hotspotEmoji}>{hotspot.emoji}</Text>
+            </View>
+          </Marker>
         );
       })}
       <Marker
@@ -118,4 +170,18 @@ export default function AstroMap({ lines, birthLat, birthLon, userLat, userLon, 
 
 const styles = StyleSheet.create({
   map: { flex: 1 },
+  hotspotMarker: {
+    backgroundColor: Colors.dark.overlay,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  hotspotEmoji: {
+    fontSize: 14,
+  },
 });

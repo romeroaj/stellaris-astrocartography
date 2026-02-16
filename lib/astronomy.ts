@@ -582,14 +582,56 @@ function splitLineAtDateline(
 
 export type SideOfLine = "west" | "east" | "on";
 
+// ── Jim Lewis Distance Thresholds (miles → km) ───────────────────
+// Source: Jim Lewis's original orb system, confirmed by Gemini research
+// 0–175 mi = Peak Intensity   →  0–282 km
+// 175–300 mi = Strong          →  282–483 km
+// 300–600 mi = Moderate        →  483–966 km
+// 600–800 mi = Subtle          →  966–1287 km
+const INFLUENCE_PEAK_KM = 282;      // 175 miles
+const INFLUENCE_STRONG_KM = 483;    // 300 miles
+const INFLUENCE_MODERATE_KM = 966;  // 600 miles
+const INFLUENCE_SUBTLE_KM = 1287;   // 800 miles — Jim Lewis's outer limit
+
+/**
+ * Continuous decay model for line strength.
+ * Returns a value from 0.0 (no influence) to 1.0 (directly on the line).
+ * Uses an exponential decay with a half-life tuned to the Jim Lewis thresholds.
+ */
+export function getLineStrength(distanceKm: number): number {
+  if (distanceKm <= 0) return 1.0;
+  if (distanceKm > INFLUENCE_SUBTLE_KM) return 0.0;
+  // Exponential decay: half-life at ~300 km (Strong threshold midpoint)
+  // This gives: on-line=1.0, 282km≈0.52, 483km≈0.32, 966km≈0.10, 1287km≈0.04
+  const halfLife = 310;
+  return Math.exp(-0.693 * distanceKm / halfLife);
+}
+
+/**
+ * Discrete influence tier based on Jim Lewis distance thresholds.
+ * "very strong" = Peak Intensity (dominant theme)
+ * "strong"      = Clear manifestation
+ * "moderate"    = Background influence
+ * "mild"        = Subtle, at the edge of Lewis's traditional orb
+ */
+function getInfluence(distanceKm: number): string {
+  if (distanceKm < INFLUENCE_PEAK_KM) return "very strong";
+  if (distanceKm < INFLUENCE_STRONG_KM) return "strong";
+  if (distanceKm < INFLUENCE_MODERATE_KM) return "moderate";
+  if (distanceKm < INFLUENCE_SUBTLE_KM) return "mild";
+  return "negligible";
+}
+
 export function findNearestLines(
   lines: AstroLine[],
   lat: number,
   lon: number,
-  maxDistanceDeg: number = 15
-): { planet: PlanetName; lineType: LineType; distance: number; influence: string; side: SideOfLine }[] {
-  const results: { planet: PlanetName; lineType: LineType; distance: number; influence: string; side: SideOfLine }[] = [];
+  maxDistanceDeg: number = 12
+): { planet: PlanetName; lineType: LineType; distance: number; influence: string; strength: number; side: SideOfLine }[] {
+  const results: { planet: PlanetName; lineType: LineType; distance: number; influence: string; strength: number; side: SideOfLine }[] = [];
   const seen = new Set<string>();
+  // 12° ≈ 1332 km at equator, covers Jim Lewis's full 800-mile (1287 km) orb
+  const maxDistKm = maxDistanceDeg * 111;
 
   for (const line of lines) {
     const key = `${line.planet}-${line.lineType}`;
@@ -605,6 +647,7 @@ export function findNearestLines(
         if (minDist < existing.distance) {
           existing.distance = minDist;
           existing.influence = getInfluence(minDist);
+          existing.strength = getLineStrength(minDist);
           existing.side = determineSide(lon, nearestLon, minDist);
         }
       }
@@ -618,13 +661,14 @@ export function findNearestLines(
       if (d < minDist) { minDist = d; nearestLon = pt.longitude; }
     }
 
-    if (minDist <= maxDistanceDeg * 111) {
+    if (minDist <= maxDistKm) {
       seen.add(key);
       results.push({
         planet: line.planet,
         lineType: line.lineType as LineType,
         distance: minDist,
         influence: getInfluence(minDist),
+        strength: getLineStrength(minDist),
         side: determineSide(lon, nearestLon, minDist),
       });
     }
@@ -635,15 +679,14 @@ export function findNearestLines(
 
 /** Determine if a city is east or west of the nearest line point. */
 function determineSide(cityLon: number, lineLon: number, distKm: number): SideOfLine {
-  if (distKm < 30) return "on";
+  if (distKm < 50) return "on";
   let diff = cityLon - lineLon;
-  // Handle dateline wrapping
   if (diff > 180) diff -= 360;
   if (diff < -180) diff += 360;
   return diff > 0 ? "east" : "west";
 }
 
-function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = (lat2 - lat1) * DEG;
   const dLon = (lon2 - lon1) * DEG;
@@ -654,9 +697,150 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
-function getInfluence(distanceKm: number): string {
-  if (distanceKm < 150) return "very strong";
-  if (distanceKm < 400) return "strong";
-  if (distanceKm < 800) return "moderate";
-  return "mild";
+// ── Paran Lines ───────────────────────────────────────────────────
+// Parans (paranatellonta): horizontal latitude lines where two planets
+// were simultaneously on angles at birth. Orb: ~120 km (75 miles).
+
+export interface ParanLine {
+  planet1: PlanetName;
+  planet2: PlanetName;
+  latitude: number;
+  /** Which angles the two planets were on simultaneously */
+  angle1: LineType;
+  angle2: LineType;
+}
+
+/**
+ * Calculate Paran lines — latitudes where two planets are simultaneously angular.
+ * A paran exists at any latitude where planet1 is on one angle while planet2
+ * is on another angle at the same sidereal time.
+ */
+export function calculateParanLines(
+  positions: PlanetPosition[],
+  gst: number
+): ParanLine[] {
+  const parans: ParanLine[] = [];
+  const corePositions = positions.filter((p) =>
+    ["sun", "moon", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune", "pluto"].includes(p.name)
+  );
+
+  // For each latitude, check if two planets are simultaneously angular
+  for (let lat = -65; lat <= 65; lat += 0.5) {
+    const tanPhi = Math.tan(lat * DEG);
+
+    for (let i = 0; i < corePositions.length; i++) {
+      for (let j = i + 1; j < corePositions.length; j++) {
+        const p1 = corePositions[i];
+        const p2 = corePositions[j];
+
+        // Check if p1 is rising/setting while p2 is culminating/anti-culminating
+        // (or any combination of the 4 angles)
+        const tanDec1 = Math.tan(p1.dec * DEG);
+        const cosH1 = -(tanPhi * tanDec1);
+        const tanDec2 = Math.tan(p2.dec * DEG);
+        const cosH2 = -(tanPhi * tanDec2);
+
+        // p1 on ASC/DSC: needs valid hour angle
+        if (Math.abs(cosH1) <= 1.0) {
+          const H1 = Math.acos(Math.max(-1, Math.min(1, cosH1))) * RAD;
+          const p1AscLST = normalizeAngle(p1.ra - H1);
+          const p1DscLST = normalizeAngle(p1.ra + H1);
+
+          // p2 on MC: LST = p2.ra
+          const p2McLST = normalizeAngle(p2.ra);
+          // p2 on IC: LST = p2.ra + 180
+          const p2IcLST = normalizeAngle(p2.ra + 180);
+
+          // Check if p1 ASC coincides with p2 MC or IC
+          if (Math.abs(angleDiffSimple(p1AscLST, p2McLST)) < 2.0) {
+            parans.push({ planet1: p1.name, planet2: p2.name, latitude: lat, angle1: "ASC", angle2: "MC" });
+          }
+          if (Math.abs(angleDiffSimple(p1AscLST, p2IcLST)) < 2.0) {
+            parans.push({ planet1: p1.name, planet2: p2.name, latitude: lat, angle1: "ASC", angle2: "IC" });
+          }
+          if (Math.abs(angleDiffSimple(p1DscLST, p2McLST)) < 2.0) {
+            parans.push({ planet1: p1.name, planet2: p2.name, latitude: lat, angle1: "DSC", angle2: "MC" });
+          }
+          if (Math.abs(angleDiffSimple(p1DscLST, p2IcLST)) < 2.0) {
+            parans.push({ planet1: p1.name, planet2: p2.name, latitude: lat, angle1: "DSC", angle2: "IC" });
+          }
+        }
+
+        // p2 on ASC/DSC with p1 on MC/IC (reverse)
+        if (Math.abs(cosH2) <= 1.0) {
+          const H2 = Math.acos(Math.max(-1, Math.min(1, cosH2))) * RAD;
+          const p2AscLST = normalizeAngle(p2.ra - H2);
+          const p2DscLST = normalizeAngle(p2.ra + H2);
+
+          const p1McLST = normalizeAngle(p1.ra);
+          const p1IcLST = normalizeAngle(p1.ra + 180);
+
+          if (Math.abs(angleDiffSimple(p2AscLST, p1McLST)) < 2.0) {
+            parans.push({ planet1: p2.name, planet2: p1.name, latitude: lat, angle1: "ASC", angle2: "MC" });
+          }
+          if (Math.abs(angleDiffSimple(p2AscLST, p1IcLST)) < 2.0) {
+            parans.push({ planet1: p2.name, planet2: p1.name, latitude: lat, angle1: "ASC", angle2: "IC" });
+          }
+          if (Math.abs(angleDiffSimple(p2DscLST, p1McLST)) < 2.0) {
+            parans.push({ planet1: p2.name, planet2: p1.name, latitude: lat, angle1: "DSC", angle2: "MC" });
+          }
+          if (Math.abs(angleDiffSimple(p2DscLST, p1IcLST)) < 2.0) {
+            parans.push({ planet1: p2.name, planet2: p1.name, latitude: lat, angle1: "DSC", angle2: "IC" });
+          }
+        }
+
+        // Both on ASC/DSC simultaneously
+        if (Math.abs(cosH1) <= 1.0 && Math.abs(cosH2) <= 1.0) {
+          const H1 = Math.acos(Math.max(-1, Math.min(1, cosH1))) * RAD;
+          const H2 = Math.acos(Math.max(-1, Math.min(1, cosH2))) * RAD;
+          const p1AscLST = normalizeAngle(p1.ra - H1);
+          const p2AscLST = normalizeAngle(p2.ra - H2);
+          const p1DscLST = normalizeAngle(p1.ra + H1);
+          const p2DscLST = normalizeAngle(p2.ra + H2);
+
+          if (Math.abs(angleDiffSimple(p1AscLST, p2AscLST)) < 2.0) {
+            parans.push({ planet1: p1.name, planet2: p2.name, latitude: lat, angle1: "ASC", angle2: "ASC" });
+          }
+          if (Math.abs(angleDiffSimple(p1AscLST, p2DscLST)) < 2.0) {
+            parans.push({ planet1: p1.name, planet2: p2.name, latitude: lat, angle1: "ASC", angle2: "DSC" });
+          }
+          if (Math.abs(angleDiffSimple(p1DscLST, p2DscLST)) < 2.0) {
+            parans.push({ planet1: p1.name, planet2: p2.name, latitude: lat, angle1: "DSC", angle2: "DSC" });
+          }
+        }
+      }
+    }
+  }
+
+  // Deduplicate parans at nearby latitudes (merge within 2° latitude)
+  const merged: ParanLine[] = [];
+  const paranSeen = new Set<string>();
+  for (const p of parans) {
+    const roundedLat = Math.round(p.latitude * 2) / 2;
+    const key = `${p.planet1}-${p.planet2}-${p.angle1}-${p.angle2}-${roundedLat}`;
+    if (paranSeen.has(key)) continue;
+    paranSeen.add(key);
+    merged.push(p);
+  }
+
+  return merged;
+}
+
+function angleDiffSimple(a: number, b: number): number {
+  let diff = a - b;
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+  return diff;
+}
+
+/**
+ * Find parans near a given latitude within the Jim Lewis paran orb (~120 km / 75 miles).
+ */
+export function findNearbyParans(
+  parans: ParanLine[],
+  lat: number,
+  orbKm: number = 120
+): ParanLine[] {
+  const orbDeg = orbKm / 111;
+  return parans.filter((p) => Math.abs(p.latitude - lat) <= orbDeg);
 }
