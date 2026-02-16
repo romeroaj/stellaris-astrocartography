@@ -461,10 +461,17 @@ export default function MapScreen() {
   // Merge transit overlay lines when time mode is active
   const allMapLines = useMemo(() => {
     if (!showTimeMode || transitLines.length === 0) return processedLines;
+<<<<<<< Updated upstream
     // Mark transit lines with sourceId so map can style them distinctly
     const markedTransit = transitLines.map((line) => ({
       ...line,
       sourceId: "transit" as const,
+=======
+    // Mark transit lines with a sourceId to distinguish them visually
+    const markedTransit = transitLines.map((line) => ({
+      ...line,
+      sourceId: "partner" as const, // Reuse partner styling for dotted/transparent look
+>>>>>>> Stashed changes
     }));
     return [...processedLines, ...markedTransit];
   }, [processedLines, transitLines, showTimeMode]);
@@ -832,18 +839,25 @@ export default function MapScreen() {
               </ScrollView>
             </View>
           )}
+<<<<<<< Updated upstream
           {transitLines.length > 0 && !simplifiedView && (
+=======
+          {transitLines.length > 0 && (
+>>>>>>> Stashed changes
             <View style={styles.ccgTransitKey}>
               <View style={styles.ccgKeyDot} />
               <Text style={styles.ccgKeyText}>Dotted lines = current transit positions</Text>
             </View>
           )}
+<<<<<<< Updated upstream
           {simplifiedView && (
             <View style={styles.ccgTransitKey}>
               <View style={[styles.ccgChipDot, { backgroundColor: Colors.dark.primary }]} />
               <Text style={styles.ccgKeyText}>Simple mode highlights city hotspots, not full transit lines</Text>
             </View>
           )}
+=======
+>>>>>>> Stashed changes
         </View>
       )}
 
