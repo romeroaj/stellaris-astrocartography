@@ -112,8 +112,9 @@ const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapW
 
     const isSynOverlap = bondModeRef.current === "synastry" && showOverlapRef.current;
 
-    // Draw all lines (always)
-    linesRef.current.forEach((line) => {
+    // Draw visible lines (Leaflet doesn't have the iOS native overlay bug,
+    // so we can simply skip hidden lines instead of rendering them transparent)
+    linesRef.current.filter((l) => !l.hidden).forEach((line) => {
       let color: string;
       if (!isSynOverlap && bondModeRef.current !== "synastry" && ccgDualToneRef.current) {
         color = line.sourceId === "transit" ? "#7DD3FC" : "#E8E2D6";

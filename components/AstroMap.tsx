@@ -135,18 +135,32 @@ const AstroMap = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMap(
       userInterfaceStyle="dark"
       showsUserLocation={!!showUserLocation}
     >
-      {lines.map((line, idx) => {
+      {lines.map((line) => {
+        // Hidden lines stay mounted as invisible native overlays to work
+        // around a react-native-maps iOS bug where unmounting a <Polyline>
+        // does not remove the underlying MKOverlay from the map.
+        if (line.hidden) {
+          return (
+            <Polyline
+              key={line.id}
+              coordinates={line.points}
+              strokeColor="transparent"
+              strokeWidth={0}
+              tappable={false}
+            />
+          );
+        }
+
         const color = getColor(line);
         const lt = Colors.lineTypes[line.lineType];
         const dash = line.sourceId === "transit"
           ? (ccgDualTone ? [2, 10] : [6, 6])
           : (lt ? lt.dash : []);
         const strokeWidth = getStrokeWidth(line);
-        const keyBase = `${line.planet}-${line.lineType}-${line.sourceId ?? ""}-${idx}`;
 
         if (line.sourceId === "transit") {
           return (
-            <React.Fragment key={keyBase}>
+            <React.Fragment key={line.id}>
               {ccgDualTone && (
                 <Polyline
                   coordinates={line.points}
@@ -171,7 +185,7 @@ const AstroMap = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMap(
 
         return (
           <Polyline
-            key={keyBase}
+            key={line.id}
             coordinates={line.points}
             strokeColor={color}
             strokeWidth={strokeWidth}
