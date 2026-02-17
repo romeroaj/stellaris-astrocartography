@@ -94,7 +94,7 @@ export default function MapScreen() {
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>("km");
   const [hideMildImpacts, setHideMildImpacts] = useState(false);
   const [enabledPlanets, setEnabledPlanets] = useState<Set<PlanetName>>(
-    new Set(DEFAULT_PLANETS_RAW)
+    new Set(ALL_PLANETS_RAW)
   );
 
   // Check for Bond params
@@ -555,27 +555,38 @@ export default function MapScreen() {
     return generateAstroLines(transitPositions, transitGst, "transit");
   }, [showTimeMode, showTransitLines, profile, isBondMode, focusedActivationsForMap, selectedDate]);
 
-  const mapLines = useMemo<AstroLine[]>(() => {
-    if (showTimeMode && showTransitLines && transitLines.length > 0) {
-      return [...processedLines, ...transitLines];
-    }
-    return processedLines;
-  }, [showTimeMode, showTransitLines, processedLines, transitLines]);
+  // ── Map render lines ──
+  // react-native-maps on iOS has a bug where removing a <Polyline> component
+  // does NOT remove the native MKOverlay from the map.  To work around this we
+  // ALWAYS render every line, but mark filtered-out lines as `hidden`.  The
+  // AstroMap component renders hidden lines as fully transparent (strokeWidth 0)
+  // so the native overlay stays alive but invisible.  This means planet toggling
+  // never triggers mount/unmount of native overlays — only style changes.
+  const mapRenderLines = useMemo<AstroLine[]>(() => {
+    const visibleIds = new Set(processedLines.map((l) => l.id));
 
-  // Debounce lines sent to the map to prevent native crash from rapid Polyline updates
-  const [debouncedLines, setDebouncedLines] = useState<AstroLine[]>([]);
-  const debouncedLinesRef = useRef(mapLines);
-  debouncedLinesRef.current = mapLines;
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedLines(debouncedLinesRef.current);
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [mapLines]);
+    // All natal lines — visible ones carry synastry overlap tags, hidden ones
+    // come straight from astroLines.
+    const natalLines: AstroLine[] = [];
+    for (const line of processedLines) {
+      natalLines.push({ ...line, hidden: false });
+    }
+    for (const line of astroLines) {
+      if (!visibleIds.has(line.id)) {
+        natalLines.push({ ...line, hidden: true });
+      }
+    }
+
+    // Transit lines (always visible when present)
+    if (showTimeMode && showTransitLines && transitLines.length > 0) {
+      return [...natalLines, ...transitLines.map((l) => ({ ...l, hidden: false }))];
+    }
+    return natalLines;
+  }, [astroLines, processedLines, showTimeMode, showTransitLines, transitLines]);
 
   const ccgDualToneEnabled = useMemo(
-    () => showTimeMode && !isBondMode && debouncedLines.some((line) => line.sourceId === "transit"),
-    [showTimeMode, isBondMode, debouncedLines]
+    () => showTimeMode && !isBondMode && mapRenderLines.some((line) => !line.hidden && line.sourceId === "transit"),
+    [showTimeMode, isBondMode, mapRenderLines]
   );
 
   const selectedTransitActivations = useMemo(() => {
@@ -613,8 +624,8 @@ export default function MapScreen() {
 
   const toggleAllPlanets = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const allEnabled = allPlanets.every((p) => enabledPlanets.has(p));
-    if (allEnabled) {
+    // Any planets visible → clear everything. Nothing visible → enable all.
+    if (enabledPlanets.size > 0) {
       setEnabledPlanets(new Set());
     } else {
       setEnabledPlanets(new Set(allPlanets));
@@ -698,12 +709,13 @@ export default function MapScreen() {
   if (!profile) return null;
 
   const allPlanetsEnabled = allPlanets.every((p) => enabledPlanets.has(p));
+  const somePlanetsEnabled = enabledPlanets.size > 0 && !allPlanetsEnabled;
 
   return (
     <View style={styles.container}>
       <AstroMap
         ref={mapRef}
-        lines={debouncedLines}
+        lines={mapRenderLines}
         hotspots={mapHotspots}
         transitGlows={transitGlows}
         birthLat={profile.latitude}
@@ -1102,21 +1114,21 @@ export default function MapScreen() {
           <Pressable
             style={[
               styles.planetChip,
-              allPlanetsEnabled
+              (allPlanetsEnabled || somePlanetsEnabled)
                 ? { backgroundColor: Colors.dark.primaryMuted, borderColor: Colors.dark.primary }
                 : {},
             ]}
             onPress={toggleAllPlanets}
           >
             <Ionicons
-              name={allPlanetsEnabled ? "checkmark-done" : "ellipse-outline"}
+              name={allPlanetsEnabled ? "checkmark-done" : somePlanetsEnabled ? "remove" : "ellipse-outline"}
               size={14}
-              color={allPlanetsEnabled ? Colors.dark.primary : Colors.dark.textMuted}
+              color={(allPlanetsEnabled || somePlanetsEnabled) ? Colors.dark.primary : Colors.dark.textMuted}
             />
             <Text
               style={[
                 styles.planetChipText,
-                allPlanetsEnabled && { color: Colors.dark.primary },
+                (allPlanetsEnabled || somePlanetsEnabled) && { color: Colors.dark.primary },
               ]}
             >
               All

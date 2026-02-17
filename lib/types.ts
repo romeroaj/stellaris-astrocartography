@@ -47,6 +47,8 @@ export type OverlapClassification =
   | "neutral_overlap";  // both neutral
 
 export interface AstroLine {
+  /** Stable identifier for React keys — must survive filtering/reordering */
+  id: string;
   planet: PlanetName;
   lineType: LineType;
   points: { latitude: number; longitude: number }[];
@@ -58,6 +60,12 @@ export interface AstroLine {
   overlapClassification?: OverlapClassification;
   /** Proximity in degrees to the other person's matching line */
   overlapProximityDeg?: number;
+  /**
+   * When true the polyline stays mounted on the native map but is rendered
+   * fully transparent.  This works around a react-native-maps iOS bug where
+   * removing a <Polyline> component doesn't remove the native MKOverlay.
+   */
+  hidden?: boolean;
 }
 
 /** Jim Lewis influence levels based on distance from planetary line */

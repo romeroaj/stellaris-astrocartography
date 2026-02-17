@@ -485,6 +485,7 @@ export function generateAstroLines(
   sourceId?: "user" | "partner" | "transit"
 ): AstroLine[] {
   const lines: AstroLine[] = [];
+  const src = sourceId ?? "user";
 
   for (const planet of positions) {
     const mcLon = normalizeLon(planet.ra - gst);
@@ -494,28 +495,32 @@ export function generateAstroLines(
     for (let lat = -89; lat <= 89; lat += 2) {
       mcPoints.push({ latitude: lat, longitude: mcLon });
     }
-    lines.push({ planet: planet.name, lineType: "MC", points: mcPoints, ...(sourceId && { sourceId }) });
+    lines.push({
+      id: `${src}-${planet.name}-MC`,
+      planet: planet.name, lineType: "MC", points: mcPoints,
+      ...(sourceId && { sourceId }),
+    });
 
     const icPoints: { latitude: number; longitude: number }[] = [];
     for (let lat = -89; lat <= 89; lat += 2) {
       icPoints.push({ latitude: lat, longitude: icLon });
     }
-    lines.push({ planet: planet.name, lineType: "IC", points: icPoints, ...(sourceId && { sourceId }) });
+    lines.push({
+      id: `${src}-${planet.name}-IC`,
+      planet: planet.name, lineType: "IC", points: icPoints,
+      ...(sourceId && { sourceId }),
+    });
 
     const ascPoints: { latitude: number; longitude: number }[] = [];
     const dscPoints: { latitude: number; longitude: number }[] = [];
 
-    // Use finer steps for better resolution and coverage
-    // Loop from -89 to +89
     let lat = -89;
     while (lat <= 89) {
       const tanPhi = Math.tan(lat * DEG);
       const tanDec = Math.tan(planet.dec * DEG);
       const cosH = -(tanPhi * tanDec);
 
-      // Allow small epsilon for float precision issues
       if (Math.abs(cosH) <= 1.000001) {
-        // Clamp to [-1, 1] to be safe for acos
         const clampedCosH = Math.max(-1, Math.min(1, cosH));
         const H = Math.acos(clampedCosH) * RAD;
 
@@ -526,26 +531,31 @@ export function generateAstroLines(
         dscPoints.push({ latitude: lat, longitude: dscLon });
       }
 
-      // Variable step size: finer near poles where curvature is high
-      // This prevents jagged lines or premature cutoffs
       const step = Math.abs(lat) > 60 ? 0.5 : 1;
       lat += step;
-      // Fix float accumulation
       lat = Math.round(lat * 10) / 10;
     }
 
     if (ascPoints.length > 2) {
       const splitAsc = splitLineAtDateline(ascPoints);
-      for (const segment of splitAsc) {
-        lines.push({ planet: planet.name, lineType: "ASC", points: segment, ...(sourceId && { sourceId }) });
-      }
+      splitAsc.forEach((segment, segIdx) => {
+        lines.push({
+          id: `${src}-${planet.name}-ASC-${segIdx}`,
+          planet: planet.name, lineType: "ASC", points: segment,
+          ...(sourceId && { sourceId }),
+        });
+      });
     }
 
     if (dscPoints.length > 2) {
       const splitDsc = splitLineAtDateline(dscPoints);
-      for (const segment of splitDsc) {
-        lines.push({ planet: planet.name, lineType: "DSC", points: segment, ...(sourceId && { sourceId }) });
-      }
+      splitDsc.forEach((segment, segIdx) => {
+        lines.push({
+          id: `${src}-${planet.name}-DSC-${segIdx}`,
+          planet: planet.name, lineType: "DSC", points: segment,
+          ...(sourceId && { sourceId }),
+        });
+      });
     }
   }
 
