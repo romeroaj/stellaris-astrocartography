@@ -4,7 +4,7 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 /**
  * Gets the base URL for the Express API server.
  * Priority:
- *   1. EXPO_PUBLIC_API_URL  — explicit full URL (e.g. http://192.168.x.x:5000 or your production API)
+ *   1. EXPO_PUBLIC_API_URL  — explicit full URL (e.g. http://192.168.x.x:5001 or your production API)
  *   2. EXPO_PUBLIC_DOMAIN   — Replit-style host:port (legacy, kept for compatibility)
  *   3. Fallback to local machine IP for Expo Go development
  */
