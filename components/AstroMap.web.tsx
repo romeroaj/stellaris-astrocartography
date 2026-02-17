@@ -1,18 +1,25 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from "react";
 import { View, StyleSheet } from "react-native";
-import { AstroLine } from "@/lib/types";
+import { AstroLine, MapHotspot } from "@/lib/types";
 import Colors from "@/constants/colors";
 import { classifyLine, SENTIMENT_COLORS, SENTIMENT_LABELS } from "@/lib/lineClassification";
 import { OVERLAP_COLORS, OVERLAP_LABELS } from "@/lib/synastryAnalysis";
 
+export interface AstroMapHandle {
+  animateToRegion: (region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }, duration?: number) => void;
+}
+
 interface AstroMapProps {
   lines: AstroLine[];
+  hotspots?: MapHotspot[];
   birthLat: number;
   birthLon: number;
   onLinePress?: (line: AstroLine) => void;
-  colorMode?: "planet" | "simplified";
+  colorMode?: "planet" | "sentiment";
   bondMode?: "synastry" | "composite";
+  ccgDualTone?: boolean;
   showOverlapHighlights?: boolean;
+  onHotspotPress?: (hotspot: MapHotspot) => void;
 }
 
 let leafletLoaded = false;
@@ -49,7 +56,21 @@ function getDashArray(lineType: string): string | undefined {
   return dashes[lineType] || undefined;
 }
 
-export default function AstroMap({ lines, birthLat, birthLon, onLinePress, colorMode = "planet", bondMode, showOverlapHighlights }: AstroMapProps) {
+const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapWeb(
+  {
+    lines,
+    hotspots = [],
+    birthLat,
+    birthLon,
+    onLinePress,
+    colorMode = "planet",
+    bondMode,
+    ccgDualTone = false,
+    showOverlapHighlights,
+    onHotspotPress,
+  },
+  ref
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const layerGroupRef = useRef<any>(null);
@@ -67,6 +88,21 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
 
   const showOverlapRef = useRef(showOverlapHighlights);
   showOverlapRef.current = showOverlapHighlights;
+  const ccgDualToneRef = useRef(ccgDualTone);
+  ccgDualToneRef.current = ccgDualTone;
+
+  const hotspotsRef = useRef(hotspots);
+  hotspotsRef.current = hotspots;
+  const onHotspotPressRef = useRef(onHotspotPress);
+  onHotspotPressRef.current = onHotspotPress;
+
+  useImperativeHandle(ref, () => ({
+    animateToRegion: (region, duration = 800) => {
+      if (mapRef.current) {
+        mapRef.current.flyTo([region.latitude, region.longitude], 8, { duration: duration / 1000 });
+      }
+    },
+  }));
 
   const updateLines = useCallback(() => {
     const L = (window as any).L;
@@ -76,9 +112,14 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
 
     const isSynOverlap = bondModeRef.current === "synastry" && showOverlapRef.current;
 
+    // Draw all lines (always)
     linesRef.current.forEach((line) => {
       let color: string;
-      if (isSynOverlap) {
+      if (!isSynOverlap && bondModeRef.current !== "synastry" && ccgDualToneRef.current) {
+        color = line.sourceId === "transit" ? "#7DD3FC" : "#E8E2D6";
+      } else if (line.sourceId === "transit") {
+        color = Colors.dark.secondary + "CC";
+      } else if (isSynOverlap) {
         if (line.isOverlapping && line.overlapClassification) {
           color = OVERLAP_COLORS[line.overlapClassification];
         } else {
@@ -87,29 +128,45 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
         }
       } else if (bondModeRef.current === "synastry" && line.sourceId) {
         color = (line.sourceId === "user" ? Colors.dark.primary : Colors.dark.secondary) + "B2";
-      } else if (colorModeRef.current === "simplified") {
+      } else if (colorModeRef.current === "sentiment") {
         const classification = classifyLine(line.planet, line.lineType);
         color = SENTIMENT_COLORS[classification.sentiment];
       } else {
         color = Colors.planets[line.planet] || "#FFFFFF";
       }
-      const dashArray = getDashArray(line.lineType);
-      let weight = line.lineType === "MC" || line.lineType === "IC" ? 3 : 2.5;
+      const dashArray = line.sourceId === "transit"
+        ? (ccgDualToneRef.current ? "2 10" : "6 6")
+        : getDashArray(line.lineType);
+      let weight = line.sourceId === "transit" ? 2 : (line.lineType === "MC" || line.lineType === "IC" ? 3 : 2.5);
       if (isSynOverlap) {
         weight = line.isOverlapping ? weight * 1.6 : weight * 0.5;
       } else if (bondModeRef.current === "synastry") {
         weight *= 0.7;
+      } else if (ccgDualToneRef.current) {
+        weight = line.sourceId === "transit" ? 2.2 : 1.1;
       }
       let opacity: number;
       if (isSynOverlap) {
         opacity = line.isOverlapping ? 0.9 : 0.15;
       } else if (bondModeRef.current === "synastry") {
         opacity = 0.65;
+      } else if (ccgDualToneRef.current) {
+        opacity = line.sourceId === "transit" ? 0.72 : 0.55;
       } else {
         opacity = 0.85;
       }
 
       const coords = line.points.map((pt) => [pt.latitude, pt.longitude] as [number, number]);
+
+      if (line.sourceId === "transit" && ccgDualToneRef.current) {
+        const glow = L.polyline(coords, {
+          color: "#7DD3FC",
+          weight: weight + 4,
+          opacity: 0.16,
+          interactive: false,
+        });
+        layerGroupRef.current.addLayer(glow);
+      }
 
       const polyline = L.polyline(coords, {
         color,
@@ -132,7 +189,7 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
       } else if (bondModeRef.current === "synastry" && line.sourceId) {
         tooltipText += ` (${line.sourceId === "user" ? "You" : "Partner"})`;
       }
-      if (colorModeRef.current === "simplified") {
+      if (colorModeRef.current === "sentiment") {
         const cls = classifyLine(line.planet, line.lineType);
         tooltipText += ` · ${SENTIMENT_LABELS[cls.sentiment]}`;
       }
@@ -143,6 +200,38 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
       });
 
       layerGroupRef.current.addLayer(polyline);
+    });
+
+    // Draw hotspot markers (always)
+    hotspotsRef.current.forEach((hotspot) => {
+      const color = hotspot.sentiment === "positive"
+        ? SENTIMENT_COLORS.positive
+        : hotspot.sentiment === "difficult"
+          ? SENTIMENT_COLORS.difficult
+          : SENTIMENT_COLORS.neutral;
+      const size = hotspot.strength >= 0.8 ? 34 : hotspot.strength >= 0.55 ? 30 : 26;
+      const marker = L.marker([hotspot.latitude, hotspot.longitude], {
+        icon: L.divIcon({
+          className: "",
+          html: `<div style="
+            width:${size}px;height:${size}px;border-radius:50%;
+            display:flex;align-items:center;justify-content:center;
+            border:2px solid ${color};
+            background:${Colors.dark.overlay};
+            box-shadow:0 0 12px ${color}66;
+            font-size:14px;
+          ">${hotspot.emoji}</div>`,
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+        }),
+      });
+      marker.on("click", () => onHotspotPressRef.current?.(hotspot));
+      marker.bindTooltip(`${hotspot.emoji} ${hotspot.city} · ${hotspot.theme}`, {
+        sticky: true,
+        className: "astro-tooltip",
+        opacity: 0.95,
+      });
+      layerGroupRef.current.addLayer(marker);
     });
   }, []);
 
@@ -229,7 +318,7 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
 
   useEffect(() => {
     updateLines();
-  }, [lines, colorMode, bondMode, showOverlapHighlights, updateLines]);
+  }, [lines, hotspots, colorMode, bondMode, ccgDualTone, showOverlapHighlights, updateLines]);
 
   return (
     <View style={styles.webMap}>
@@ -247,7 +336,9 @@ export default function AstroMap({ lines, birthLat, birthLon, onLinePress, color
       />
     </View>
   );
-}
+});
+
+export default AstroMapWeb;
 
 const styles = StyleSheet.create({
   webMap: { flex: 1, position: "relative" as any },

@@ -19,7 +19,7 @@ import {
   getPlanetIcon,
   getSideOfLineInfo,
 } from "@/lib/interpretations";
-import { getActiveProfile } from "@/lib/storage";
+import { getActiveProfile, getSettings, formatDistance, DistanceUnit } from "@/lib/storage";
 import { authFetch } from "@/lib/auth";
 import {
   calculatePlanetPositions,
@@ -41,10 +41,12 @@ export default function LineDetailScreen() {
 
   const [nearbyCities, setNearbyCities] = React.useState<CityWithDistance[]>([]);
   const [loadingCities, setLoadingCities] = React.useState(true);
+  const [distanceUnit, setDistanceUnit] = React.useState<DistanceUnit>("km");
 
   useFocusEffect(
     React.useCallback(() => {
       calculateCities();
+      getSettings().then((s) => setDistanceUnit(s.distanceUnit));
     }, [planet, lineType, viewFriendId])
   );
 
@@ -200,7 +202,7 @@ export default function LineDetailScreen() {
                 <View key={i} style={styles.cityChip}>
                   <Ionicons name="location-sharp" size={12} color={Colors.dark.textMuted} />
                   <Text style={styles.cityText}>{city.name}, {city.country}</Text>
-                  <Text style={styles.cityDist}>{Math.round(city.distance)} km</Text>
+                  <Text style={styles.cityDist}>{formatDistance(city.distance, distanceUnit)}</Text>
                 </View>
               ))}
             </View>
