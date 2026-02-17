@@ -1,31 +1,42 @@
-import React from "react";
+import React, { useRef, useImperativeHandle, forwardRef } from "react";
 import { StyleSheet, View, Text } from "react-native";
-import MapView, { Polyline, Marker, PROVIDER_DEFAULT, Region } from "react-native-maps";
+import MapView, { Polyline, Marker, Circle, PROVIDER_DEFAULT, Region } from "react-native-maps";
 import { AstroLine, MapHotspot } from "@/lib/types";
 import Colors from "@/constants/colors";
 import { classifyLine, SENTIMENT_COLORS } from "@/lib/lineClassification";
 import { OVERLAP_COLORS } from "@/lib/synastryAnalysis";
 
+export interface AstroMapHandle {
+  animateToRegion: (region: Region, duration?: number) => void;
+}
+
+/** Hotspot with transit glow info */
+export interface TransitGlow {
+  id: string;
+  latitude: number;
+  longitude: number;
+  intensity: number;
+  color: string;
+  label: string;
+}
+
 interface AstroMapProps {
   lines: AstroLine[];
   hotspots?: MapHotspot[];
+  transitGlows?: TransitGlow[];
   birthLat: number;
   birthLon: number;
   userLat?: number | null;
   userLon?: number | null;
-  /** When true, shows the native blue pulsing dot for current GPS location */
   showUserLocation?: boolean;
   onLinePress?: (line: AstroLine) => void;
-  colorMode?: "planet" | "simplified";
-  viewMode?: "simple" | "advanced";
-  /** When in Synastry bond mode: color lines by user vs partner */
+  colorMode?: "planet" | "sentiment";
   bondMode?: "synastry" | "composite";
-  /** When true, highlight overlapping synastry lines and fade the rest */
+  ccgDualTone?: boolean;
   showOverlapHighlights?: boolean;
   onHotspotPress?: (hotspot: MapHotspot) => void;
 }
 
-// Persist region across remounts so navigating away and back doesn't reset the view
 let savedRegion: Region | null = null;
 
 const DEFAULT_REGION: Region = {
@@ -35,22 +46,33 @@ const DEFAULT_REGION: Region = {
   longitudeDelta: 180,
 };
 
-export default function AstroMap({
-  lines,
-  hotspots = [],
-  birthLat,
-  birthLon,
-  userLat,
-  userLon,
-  showUserLocation,
-  onLinePress,
-  colorMode = "planet",
-  viewMode = "advanced",
-  bondMode,
-  showOverlapHighlights,
-  onHotspotPress,
-}: AstroMapProps) {
-  // Priority: 1) saved region (user already panned), 2) GPS, 3) birth location, 4) default
+const AstroMap = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMap(
+  {
+    lines,
+    hotspots = [],
+    transitGlows = [],
+    birthLat,
+    birthLon,
+    userLat,
+    userLon,
+    showUserLocation,
+    onLinePress,
+    colorMode = "planet",
+    bondMode,
+    ccgDualTone = false,
+    showOverlapHighlights,
+    onHotspotPress,
+  },
+  ref
+) {
+  const mapRef = useRef<MapView>(null);
+
+  useImperativeHandle(ref, () => ({
+    animateToRegion: (region: Region, duration = 800) => {
+      mapRef.current?.animateToRegion(region, duration);
+    },
+  }));
+
   const initialRegion = React.useMemo(() => {
     if (savedRegion) return savedRegion;
     if (userLat != null && userLon != null) {
@@ -60,28 +82,29 @@ export default function AstroMap({
       return { latitude: birthLat, longitude: birthLon, latitudeDelta: 40, longitudeDelta: 60 };
     }
     return DEFAULT_REGION;
-  }, []); // Only compute once on mount
+  }, []);
+
   const isSynastryOverlap = bondMode === "synastry" && showOverlapHighlights;
 
   const getColor = (line: AstroLine): string => {
+    if (!isSynastryOverlap && bondMode !== "synastry" && ccgDualTone) {
+      return line.sourceId === "transit" ? "#7DD3FCB8" : "#E8E2D699";
+    }
     if (line.sourceId === "transit") {
       return Colors.dark.secondary + "CC";
     }
-    // Synastry overlap highlight mode
     if (isSynastryOverlap) {
       if (line.isOverlapping && line.overlapClassification) {
         return OVERLAP_COLORS[line.overlapClassification];
       }
-      // Non-overlapping lines: deeply faded
       const base = line.sourceId === "user" ? Colors.dark.primary : Colors.dark.secondary;
-      return base + "20"; // ~12% opacity
+      return base + "20";
     }
-    // Standard synastry coloring (overlap highlights off)
     if (bondMode === "synastry" && line.sourceId) {
       const hex = line.sourceId === "user" ? Colors.dark.primary : Colors.dark.secondary;
-      return hex + "B2"; // ~70% opacity
+      return hex + "B2";
     }
-    if (colorMode === "simplified") {
+    if (colorMode === "sentiment") {
       const classification = classifyLine(line.planet, line.lineType);
       return SENTIMENT_COLORS[classification.sentiment];
     }
@@ -89,9 +112,10 @@ export default function AstroMap({
   };
 
   const getStrokeWidth = (line: AstroLine): number => {
-    if (line.sourceId === "transit") {
-      return 1.5;
+    if (!isSynastryOverlap && bondMode !== "synastry" && ccgDualTone) {
+      return line.sourceId === "transit" ? 2.3 : 1.1;
     }
+    if (line.sourceId === "transit") return 1.5;
     const base = line.lineType === "MC" || line.lineType === "IC" ? 2.5 : 2;
     if (isSynastryOverlap) {
       return line.isOverlapping ? base * 1.4 : base * 0.5;
@@ -102,24 +126,52 @@ export default function AstroMap({
 
   return (
     <MapView
+      ref={mapRef}
       style={styles.map}
       provider={PROVIDER_DEFAULT}
       initialRegion={initialRegion}
-      onRegionChangeComplete={(region) => {
-        savedRegion = region;
-      }}
+      onRegionChangeComplete={(region) => { savedRegion = region; }}
       mapType="standard"
       userInterfaceStyle="dark"
       showsUserLocation={!!showUserLocation}
     >
-      {viewMode === "advanced" && lines.map((line, idx) => {
+      {lines.map((line, idx) => {
         const color = getColor(line);
         const lt = Colors.lineTypes[line.lineType];
-        const dash = line.sourceId === "transit" ? [6, 6] : (lt ? lt.dash : []);
+        const dash = line.sourceId === "transit"
+          ? (ccgDualTone ? [2, 10] : [6, 6])
+          : (lt ? lt.dash : []);
         const strokeWidth = getStrokeWidth(line);
+        const keyBase = `${line.planet}-${line.lineType}-${line.sourceId ?? ""}-${idx}`;
+
+        if (line.sourceId === "transit") {
+          return (
+            <React.Fragment key={keyBase}>
+              {ccgDualTone && (
+                <Polyline
+                  coordinates={line.points}
+                  strokeColor={"#7DD3FC30"}
+                  strokeWidth={strokeWidth + 3.8}
+                  tappable={false}
+                  zIndex={3}
+                />
+              )}
+              <Polyline
+                coordinates={line.points}
+                strokeColor={color}
+                strokeWidth={strokeWidth}
+                lineDashPattern={dash}
+                tappable={!!onLinePress}
+                onPress={() => onLinePress?.(line)}
+                zIndex={ccgDualTone ? 4 : 2}
+              />
+            </React.Fragment>
+          );
+        }
+
         return (
           <Polyline
-            key={`${line.planet}-${line.lineType}-${line.sourceId ?? ""}-${idx}-${lines.length}`}
+            key={keyBase}
             coordinates={line.points}
             strokeColor={color}
             strokeWidth={strokeWidth}
@@ -130,7 +182,7 @@ export default function AstroMap({
           />
         );
       })}
-      {viewMode === "simple" && hotspots.map((hotspot) => {
+      {hotspots.map((hotspot) => {
         const markerColor = hotspot.sentiment === "positive"
           ? SENTIMENT_COLORS.positive
           : hotspot.sentiment === "difficult"
@@ -147,16 +199,36 @@ export default function AstroMap({
           >
             <View style={[
               styles.hotspotMarker,
-              {
-                width: size,
-                height: size,
-                borderRadius: size / 2,
-                borderColor: markerColor,
-              },
+              { width: size, height: size, borderRadius: size / 2, borderColor: markerColor },
             ]}>
               <Text style={styles.hotspotEmoji}>{hotspot.emoji}</Text>
             </View>
           </Marker>
+        );
+      })}
+      {transitGlows.map((glow) => {
+        const radius = 60000 + glow.intensity * 120000;
+        const alpha = Math.round(0.12 + glow.intensity * 0.22 * 255).toString(16).padStart(2, "0");
+        const strokeAlpha = Math.round((0.25 + glow.intensity * 0.35) * 255).toString(16).padStart(2, "0");
+        return (
+          <React.Fragment key={`glow-${glow.id}`}>
+            <Circle
+              center={{ latitude: glow.latitude, longitude: glow.longitude }}
+              radius={radius}
+              fillColor={glow.color + alpha}
+              strokeColor={glow.color + strokeAlpha}
+              strokeWidth={1.5}
+              zIndex={3}
+            />
+            <Circle
+              center={{ latitude: glow.latitude, longitude: glow.longitude }}
+              radius={radius * 0.5}
+              fillColor={glow.color + strokeAlpha}
+              strokeColor={"transparent"}
+              strokeWidth={0}
+              zIndex={4}
+            />
+          </React.Fragment>
         );
       })}
       <Marker
@@ -166,7 +238,9 @@ export default function AstroMap({
       />
     </MapView>
   );
-}
+});
+
+export default AstroMap;
 
 const styles = StyleSheet.create({
   map: { flex: 1 },

@@ -2,21 +2,19 @@
  * TimeScrubber — Cyclocartography time navigation component
  *
  * Provides:
- * - Horizontal date slider for scrubbing through time
- * - Quick jump buttons (Today, +1M, +6M, +1Y)
- * - Month/year display with prev/next navigation
- * - Tap to open a date-jump modal (specific month + year)
- * - Visual indicators for activation intensity across the timeline
+ * - Left/right arrows for prev/next month
+ * - Tappable date display that opens a month+year jump modal
+ * - "Today" pill that appears when not on the current month
+ * - Compact variant for inline use
  */
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
   Modal,
-  ScrollView,
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,13 +22,9 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 
 interface TimeScrubberProps {
-  /** The currently selected date */
   selectedDate: Date;
-  /** Called when the user changes the date */
   onDateChange: (date: Date) => void;
-  /** Optional: activation intensity per month (0-1) for the heatmap dots */
   monthlyIntensity?: Map<string, number>;
-  /** Whether to show the compact (inline) or expanded view */
   compact?: boolean;
 }
 
@@ -44,14 +38,6 @@ const FULL_MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-const QUICK_JUMPS = [
-  { label: "Today", offset: 0 },
-  { label: "+1M", offset: 1 },
-  { label: "+3M", offset: 3 },
-  { label: "+6M", offset: 6 },
-  { label: "+1Y", offset: 12 },
-];
-
 function addMonths(date: Date, months: number): Date {
   const result = new Date(date);
   result.setMonth(result.getMonth() + months);
@@ -62,10 +48,6 @@ function isSameMonth(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
-function monthKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
 export default function TimeScrubber({
   selectedDate,
   onDateChange,
@@ -74,23 +56,7 @@ export default function TimeScrubber({
 }: TimeScrubberProps) {
   const [showJumpModal, setShowJumpModal] = useState(false);
   const [jumpYear, setJumpYear] = useState(selectedDate.getFullYear());
-  const scrollRef = useRef<ScrollView>(null);
   const today = new Date();
-
-  // Generate 25 months: 12 past + current + 12 future
-  const months = React.useMemo(() => {
-    const result: Date[] = [];
-    for (let i = -12; i <= 12; i++) {
-      result.push(addMonths(today, i));
-    }
-    return result;
-  }, []);
-
-  const handleMonthSelect = useCallback((date: Date) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const newDate = new Date(date.getFullYear(), date.getMonth(), 15);
-    onDateChange(newDate);
-  }, [onDateChange]);
 
   const handlePrevMonth = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -102,19 +68,15 @@ export default function TimeScrubber({
     onDateChange(addMonths(selectedDate, 1));
   }, [selectedDate, onDateChange]);
 
-  const handleQuickJump = useCallback((offsetMonths: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (offsetMonths === 0) {
-      onDateChange(new Date());
-    } else {
-      onDateChange(addMonths(new Date(), offsetMonths));
-    }
-  }, [onDateChange]);
-
   const handleJumpToMonthYear = useCallback((month: number, year: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onDateChange(new Date(year, month, 15));
     setShowJumpModal(false);
+  }, [onDateChange]);
+
+  const handleToday = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onDateChange(new Date());
   }, [onDateChange]);
 
   const getIntensityColor = (intensity: number): string => {
@@ -124,48 +86,14 @@ export default function TimeScrubber({
     return "transparent";
   };
 
-  if (compact) {
-    return (
-      <View style={styles.compactContainer}>
-        <Pressable style={styles.compactNav} onPress={handlePrevMonth}>
-          <Ionicons name="chevron-back" size={18} color={Colors.dark.textSecondary} />
-        </Pressable>
-
-        <Pressable
-          style={styles.compactDateDisplay}
-          onPress={() => setShowJumpModal(true)}
-        >
-          <Ionicons name="time-outline" size={14} color={Colors.dark.primary} />
-          <Text style={styles.compactDateText}>
-            {FULL_MONTHS[selectedDate.getMonth()]} {selectedDate.getFullYear()}
-          </Text>
-          <Ionicons name="chevron-down" size={12} color={Colors.dark.textMuted} />
-        </Pressable>
-
-        <Pressable style={styles.compactNav} onPress={handleNextMonth}>
-          <Ionicons name="chevron-forward" size={18} color={Colors.dark.textSecondary} />
-        </Pressable>
-
-        {!isSameMonth(selectedDate, today) && (
-          <Pressable
-            style={styles.todayPill}
-            onPress={() => handleQuickJump(0)}
-          >
-            <Text style={styles.todayPillText}>Today</Text>
-          </Pressable>
-        )}
-
-        {renderJumpModal()}
-      </View>
-    );
-  }
+  const notToday = !isSameMonth(selectedDate, today);
 
   function renderJumpModal() {
     return (
       <Modal
         visible={showJumpModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="formSheet"
         onRequestClose={() => setShowJumpModal(false)}
       >
         <View style={styles.modalContainer}>
@@ -229,14 +157,14 @@ export default function TimeScrubber({
             })}
           </View>
 
-          {/* Quick jump shortcuts */}
-          <View style={styles.modalQuickJumps}>
+          {/* Today shortcut */}
+          <View style={styles.modalFooter}>
             <Pressable
-              style={styles.modalQuickJumpBtn}
+              style={styles.modalTodayBtn}
               onPress={() => { handleJumpToMonthYear(today.getMonth(), today.getFullYear()); }}
             >
               <Ionicons name="today-outline" size={16} color={Colors.dark.primary} />
-              <Text style={styles.modalQuickJumpText}>Back to Today</Text>
+              <Text style={styles.modalTodayText}>Back to Today</Text>
             </Pressable>
           </View>
         </View>
@@ -244,9 +172,42 @@ export default function TimeScrubber({
     );
   }
 
+  if (compact) {
+    return (
+      <View style={styles.compactContainer}>
+        <Pressable style={styles.compactNav} onPress={handlePrevMonth}>
+          <Ionicons name="chevron-back" size={18} color={Colors.dark.textSecondary} />
+        </Pressable>
+
+        <Pressable
+          style={styles.compactDateDisplay}
+          onPress={() => { setJumpYear(selectedDate.getFullYear()); setShowJumpModal(true); }}
+        >
+          <Ionicons name="time-outline" size={14} color={Colors.dark.primary} />
+          <Text style={styles.compactDateText}>
+            {FULL_MONTHS[selectedDate.getMonth()]} {selectedDate.getFullYear()}
+          </Text>
+          <Ionicons name="chevron-down" size={12} color={Colors.dark.textMuted} />
+        </Pressable>
+
+        <Pressable style={styles.compactNav} onPress={handleNextMonth}>
+          <Ionicons name="chevron-forward" size={18} color={Colors.dark.textSecondary} />
+        </Pressable>
+
+        {notToday && (
+          <Pressable style={styles.todayPill} onPress={handleToday}>
+            <Text style={styles.todayPillText}>Today</Text>
+          </Pressable>
+        )}
+
+        {renderJumpModal()}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* Header: Current date + jump button */}
+      {/* Header: arrows + date display + today */}
       <View style={styles.headerRow}>
         <Pressable style={styles.navBtn} onPress={handlePrevMonth}>
           <Ionicons name="chevron-back" size={20} color={Colors.dark.textSecondary} />
@@ -269,72 +230,13 @@ export default function TimeScrubber({
         <Pressable style={styles.navBtn} onPress={handleNextMonth}>
           <Ionicons name="chevron-forward" size={20} color={Colors.dark.textSecondary} />
         </Pressable>
-      </View>
 
-      {/* Month timeline strip */}
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.timelineContent}
-        style={styles.timeline}
-      >
-        {months.map((date) => {
-          const isSelected = isSameMonth(date, selectedDate);
-          const isToday = isSameMonth(date, today);
-          const key = monthKey(date);
-          const intensity = monthlyIntensity?.get(key) || 0;
-
-          return (
-            <Pressable
-              key={key}
-              style={[
-                styles.timelineItem,
-                isSelected && styles.timelineItemSelected,
-                isToday && !isSelected && styles.timelineItemToday,
-              ]}
-              onPress={() => handleMonthSelect(date)}
-            >
-              <Text style={[
-                styles.timelineMonth,
-                isSelected && styles.timelineMonthSelected,
-                isToday && !isSelected && styles.timelineMonthToday,
-              ]}>
-                {MONTHS[date.getMonth()]}
-              </Text>
-              <Text style={[
-                styles.timelineYear,
-                isSelected && styles.timelineYearSelected,
-              ]}>
-                {date.getFullYear()}
-              </Text>
-              {intensity > 0 && (
-                <View style={[
-                  styles.timelineDot,
-                  { backgroundColor: getIntensityColor(intensity) },
-                ]} />
-              )}
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* Quick jump buttons */}
-      <View style={styles.quickJumps}>
-        {QUICK_JUMPS.map((jump) => {
-          const isActive = jump.offset === 0 && isSameMonth(selectedDate, today);
-          return (
-            <Pressable
-              key={jump.label}
-              style={[styles.quickJumpBtn, isActive && styles.quickJumpBtnActive]}
-              onPress={() => handleQuickJump(jump.offset)}
-            >
-              <Text style={[styles.quickJumpText, isActive && styles.quickJumpTextActive]}>
-                {jump.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {notToday && (
+          <Pressable style={styles.todayBtn} onPress={handleToday}>
+            <Ionicons name="today-outline" size={14} color={Colors.dark.primary} />
+            <Text style={styles.todayBtnText}>Today</Text>
+          </Pressable>
+        )}
       </View>
 
       {renderJumpModal()}
@@ -343,19 +245,18 @@ export default function TimeScrubber({
 }
 
 const styles = StyleSheet.create({
-  // ── Full layout ──
   container: {
     backgroundColor: Colors.dark.card,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: Colors.dark.cardBorder,
-    gap: 12,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    gap: 8,
   },
   navBtn: {
     width: 36,
@@ -379,82 +280,21 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     color: Colors.dark.text,
   },
-  // ── Timeline strip ──
-  timeline: {
-    flexGrow: 0,
-    marginHorizontal: -16,
-  },
-  timelineContent: {
-    paddingHorizontal: 16,
-    gap: 6,
-  },
-  timelineItem: {
+  todayBtn: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: Colors.dark.surface,
-    minWidth: 52,
+    backgroundColor: Colors.dark.primary + "20",
   },
-  timelineItemSelected: {
-    backgroundColor: Colors.dark.primary,
-  },
-  timelineItemToday: {
-    borderWidth: 1,
-    borderColor: Colors.dark.primary + "60",
-  },
-  timelineMonth: {
-    fontSize: 12,
+  todayBtnText: {
+    fontSize: 13,
     fontFamily: "Outfit_600SemiBold",
-    color: Colors.dark.textSecondary,
-  },
-  timelineMonthSelected: {
-    color: Colors.dark.background,
-  },
-  timelineMonthToday: {
     color: Colors.dark.primary,
   },
-  timelineYear: {
-    fontSize: 10,
-    fontFamily: "Outfit_400Regular",
-    color: Colors.dark.textMuted,
-    marginTop: 1,
-  },
-  timelineYearSelected: {
-    color: Colors.dark.background + "CC",
-  },
-  timelineDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    marginTop: 3,
-  },
-  // ── Quick jumps ──
-  quickJumps: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  quickJumpBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    borderRadius: 8,
-    backgroundColor: Colors.dark.surface,
-  },
-  quickJumpBtnActive: {
-    backgroundColor: Colors.dark.primaryMuted,
-    borderWidth: 1,
-    borderColor: Colors.dark.primary + "40",
-  },
-  quickJumpText: {
-    fontSize: 12,
-    fontFamily: "Outfit_600SemiBold",
-    color: Colors.dark.textSecondary,
-  },
-  quickJumpTextActive: {
-    color: Colors.dark.primary,
-  },
-  // ── Compact layout ──
+  // ── Compact ──
   compactContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -495,7 +335,7 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_600SemiBold",
     color: Colors.dark.primary,
   },
-  // ── Jump modal ──
+  // ── Modal ──
   modalContainer: {
     flex: 1,
     backgroundColor: Colors.dark.background,
@@ -506,17 +346,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 32,
+    marginBottom: 28,
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: "Outfit_700Bold",
     color: Colors.dark.text,
   },
   modalCloseBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.dark.card,
     alignItems: "center",
     justifyContent: "center",
@@ -580,11 +420,11 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginTop: 6,
   },
-  modalQuickJumps: {
-    marginTop: 32,
+  modalFooter: {
+    marginTop: 28,
     alignItems: "center",
   },
-  modalQuickJumpBtn: {
+  modalTodayBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -593,7 +433,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.dark.primaryMuted,
   },
-  modalQuickJumpText: {
+  modalTodayText: {
     fontSize: 15,
     fontFamily: "Outfit_600SemiBold",
     color: Colors.dark.primary,

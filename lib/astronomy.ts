@@ -482,7 +482,7 @@ export function computeCompositePositions(
 export function generateAstroLines(
   positions: PlanetPosition[],
   gst: number,
-  sourceId?: "user" | "partner"
+  sourceId?: "user" | "partner" | "transit"
 ): AstroLine[] {
   const lines: AstroLine[] = [];
 
@@ -630,8 +630,9 @@ export function findNearestLines(
 ): { planet: PlanetName; lineType: LineType; distance: number; influence: string; strength: number; side: SideOfLine }[] {
   const results: { planet: PlanetName; lineType: LineType; distance: number; influence: string; strength: number; side: SideOfLine }[] = [];
   const seen = new Set<string>();
-  // 12° ≈ 1332 km at equator, covers Jim Lewis's full 800-mile (1287 km) orb
+  // 12° ≈ 1332 km at equator. We still hard-cap at Jim Lewis 800-mile orb (1287 km).
   const maxDistKm = maxDistanceDeg * 111;
+  const hardMaxKm = Math.min(maxDistKm, INFLUENCE_SUBTLE_KM);
 
   for (const line of lines) {
     const key = `${line.planet}-${line.lineType}`;
@@ -661,7 +662,7 @@ export function findNearestLines(
       if (d < minDist) { minDist = d; nearestLon = pt.longitude; }
     }
 
-    if (minDist <= maxDistKm) {
+    if (minDist <= hardMaxKm) {
       seen.add(key);
       results.push({
         planet: line.planet,

@@ -35,7 +35,7 @@ export default function LearnScreen() {
     const insets = useSafeAreaInsets();
     const [profile, setProfile] = useState<BirthData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<"about" | "lines">("about");
+    const [activeTab, setActiveTab] = useState<"about" | "ccg" | "lines">("about");
     const [includeMinorPlanets, setIncludeMinorPlanets] = useState(true);
 
     const topInset = Platform.OS === "web" ? 67 : insets.top;
@@ -80,6 +80,17 @@ export default function LearnScreen() {
                         </Text>
                     </Pressable>
                     <Pressable
+                        style={[styles.tab, activeTab === "ccg" && styles.tabActive]}
+                        onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setActiveTab("ccg");
+                        }}
+                    >
+                        <Text style={[styles.tabText, activeTab === "ccg" && styles.tabTextActive]}>
+                            CCG & Transits
+                        </Text>
+                    </Pressable>
+                    <Pressable
                         style={[styles.tab, activeTab === "lines" && styles.tabActive]}
                         onPress={() => {
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -105,7 +116,9 @@ export default function LearnScreen() {
                         <Text style={styles.heroText}>
                             Astrocartography maps your birth chart onto the globe, showing where different
                             planetary energies are strongest for you. Living near these lines amplifies that
-                            planet's influence on your life.
+                            planet's influence on your life. Stellaris extends this with Cyclocartography (CCG)
+                            — adding transits and secondary progressions so you can see when and where your natal
+                            lines are being activated over time.
                         </Text>
                     </View>
 
@@ -181,6 +194,61 @@ export default function LearnScreen() {
                             </View>
                         </View>
                     ))}
+
+                    <View style={{ height: 120 }} />
+                </ScrollView>
+            ) : activeTab === "ccg" ? (
+                <ScrollView
+                    style={styles.content}
+                    contentContainerStyle={styles.contentInner}
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.heroCard}>
+                        <Text style={styles.heroTitle}>Cyclocartography (CCG)</Text>
+                        <Text style={styles.heroText}>
+                            Cyclocartography combines your natal astrocartographic lines with moving planetary
+                            cycles — transits and secondary progressions — to reveal when and where your lines
+                            are lit up. Use the clock button on the Map to enter Time Mode and explore.
+                        </Text>
+                    </View>
+
+                    <Text style={styles.sectionTitle}>Transits</Text>
+                    <Text style={styles.ccgSectionText}>
+                        Transits are the current positions of the outer planets (Jupiter, Saturn, Uranus,
+                        Neptune, Pluto) as they move through the sky today. When a transiting planet makes
+                        an aspect (conjunction, trine, square, etc.) to one of your natal planetary positions,
+                        it activates that planet’s astrocartographic lines. In Time Mode, dotted lines show
+                        where these transiting planets fall on the map.
+                    </Text>
+
+                    <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Secondary Progressions</Text>
+                    <Text style={styles.ccgSectionText}>
+                        Secondary progressions use a “day equals a year” rule: each day after your birth
+                        corresponds to one year of life. Your progressed Sun, Moon, Mercury, Venus, and Mars
+                        move slowly over decades. When they aspect your natal positions, your lines are
+                        activated in a more personal, long-term way than transits alone.
+                    </Text>
+
+                    <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Line Activations</Text>
+                    <Text style={styles.ccgSectionText}>
+                        When a transit or progression hits a natal planet, that planet’s lines become
+                        activated — more significant and energized. The app shows activation chips (e.g.
+                        Jupiter → Venus) indicating which transiting planet is touching which natal line.
+                        Exact orbs mean stronger activation; moderate orbs mean the energy is building or
+                        fading.
+                    </Text>
+
+                    <View style={[styles.lineTypeCard, { marginTop: 16 }]}>
+                        <View style={[styles.lineTypeDot, { backgroundColor: Colors.dark.primary }]} />
+                        <View style={styles.lineTypeContent}>
+                            <Text style={styles.lineTypeTitle}>Using Time Mode</Text>
+                            <Text style={styles.lineTypeDesc}>
+                                On the Map, tap the clock icon to enable Time Mode. Pick a date with the scrubber,
+                                and the map will show transit lines plus any active activations. Tap cities to
+                                see how transits affect that location.
+                            </Text>
+                        </View>
+                    </View>
 
                     <View style={{ height: 120 }} />
                 </ScrollView>
@@ -312,6 +380,13 @@ const styles = StyleSheet.create({
         fontFamily: "Outfit_400Regular",
         color: Colors.dark.textSecondary,
         lineHeight: 23,
+    },
+    ccgSectionText: {
+        fontSize: 14,
+        fontFamily: "Outfit_400Regular",
+        color: Colors.dark.textSecondary,
+        lineHeight: 22,
+        marginBottom: 8,
     },
     sectionTitle: {
         fontSize: 18,

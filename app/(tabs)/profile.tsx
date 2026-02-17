@@ -36,7 +36,11 @@ export default function ProfileScreen() {
   const [profiles, setProfiles] = useState<BirthData[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [settings, setSettingsState] = useState<AppSettings>({ includeMinorPlanets: true, distanceUnit: "km" });
+  const [settings, setSettingsState] = useState<AppSettings>({
+    includeMinorPlanets: true,
+    distanceUnit: "km",
+    hideMildImpacts: false,
+  });
 
   const [editProfile, setEditProfile] = useState<BirthData | null>(null);
   const [editName, setEditName] = useState("");
@@ -87,6 +91,13 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await setSettings({ distanceUnit: next });
     setSettingsState((prev) => ({ ...prev, distanceUnit: next }));
+  };
+
+  const toggleMildImpacts = async () => {
+    const next = !settings.hideMildImpacts;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await setSettings({ hideMildImpacts: next });
+    setSettingsState((prev) => ({ ...prev, hideMildImpacts: next }));
   };
 
   const openEdit = (profile: BirthData) => {
@@ -427,6 +438,32 @@ export default function ProfileScreen() {
               <View style={[styles.unitOption, settings.distanceUnit === "mi" && styles.unitOptionActive]}>
                 <Text style={[styles.unitOptionText, settings.distanceUnit === "mi" && styles.unitOptionTextActive]}>mi</Text>
               </View>
+            </Pressable>
+          </View>
+
+          <View style={[styles.settingsRow, { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: Colors.dark.cardBorder }]}>
+            <View style={styles.settingsRowLeft}>
+              <Ionicons name="filter-outline" size={20} color={Colors.dark.textSecondary} />
+              <View>
+                <Text style={styles.settingsLabel}>Ignore Mild Impacts</Text>
+                <Text style={styles.settingsDesc}>
+                  Show only moderate, strong, and very strong city impacts
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              style={[
+                styles.toggle,
+                settings.hideMildImpacts && styles.toggleActive,
+              ]}
+              onPress={toggleMildImpacts}
+            >
+              <View
+                style={[
+                  styles.toggleThumb,
+                  settings.hideMildImpacts && styles.toggleThumbActive,
+                ]}
+              />
             </Pressable>
           </View>
         </View>

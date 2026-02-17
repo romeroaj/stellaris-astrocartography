@@ -27,6 +27,8 @@ import {
   generateAstroLines,
   findNearestLines,
 } from "./astronomy";
+import { filterNearbyByImpact } from "./settings";
+import { classifyLine } from "./lineClassification";
 
 // ── Constants ─────────────────────────────────────────────────────
 
@@ -54,6 +56,27 @@ const ASPECTS: { type: AspectType; angle: number; orb: number; strength: number 
   { type: "square", angle: 90, orb: 6, strength: 0.85 },
   { type: "sextile", angle: 60, orb: 4, strength: 0.5 },
 ];
+
+const TRANSIT_FAVORABILITY_SCORE: Partial<Record<PlanetName, number>> = {
+  jupiter: 1.2,
+  venus: 1.0,
+  sun: 0.8,
+  moon: 0.5,
+  mercury: 0.3,
+  mars: -1.0,
+  saturn: -0.9,
+  uranus: -0.4,
+  neptune: -0.3,
+  pluto: -0.6,
+};
+
+const ASPECT_FAVORABILITY_SCORE: Record<AspectType, number> = {
+  trine: 1.1,
+  sextile: 0.9,
+  conjunction: 0.5,
+  square: -1.1,
+  opposition: -0.8,
+};
 
 /**
  * Planet-specific orb multipliers based on Gemini research:
@@ -259,6 +282,12 @@ function getAspectQuality(aspect: AspectType): "harmonious" | "challenging" | "n
     case "square":
     case "opposition": return "challenging";
   }
+}
+
+function sentimentToScore(sentiment: ReturnType<typeof classifyLine>["sentiment"]): number {
+  if (sentiment === "positive") return 1;
+  if (sentiment === "difficult") return -1;
+  return 0;
 }
 
 /** Generate a human-readable summary for a transit aspect */
@@ -532,7 +561,8 @@ export function getCityActivation(
   birthDate: string,
   birthTime: string,
   birthLongitude: number,
-  targetDate: Date = new Date()
+  targetDate: Date = new Date(),
+  hideMildImpacts: boolean = false
 ): CityActivation {
   // Get natal lines near this city
   const birth = parseDateParts(birthDate);
@@ -544,8 +574,22 @@ export function getCityActivation(
     birth.year, birth.month, birth.day, time.hour, time.minute, birthLongitude
   );
   const astroLines = generateAstroLines(natalPositions, gst);
-  const nearbyLines = findNearestLines(astroLines, cityLat, cityLon, 15);
+  const nearbyLines = filterNearbyByImpact(
+    findNearestLines(astroLines, cityLat, cityLon, 15),
+    hideMildImpacts
+  );
   const nearbyPlanets = new Set(nearbyLines.map((l) => l.planet));
+  const nearbyPlanetSentiment = new Map<PlanetName, number>();
+
+  for (const line of nearbyLines) {
+    const lineSentiment = classifyLine(line.planet, line.lineType).sentiment;
+    const sentimentScore = sentimentToScore(lineSentiment);
+    const prev = nearbyPlanetSentiment.get(line.planet);
+    // Keep the strongest-magnitude local tone for each natal planet near this city.
+    if (prev === undefined || Math.abs(sentimentScore) > Math.abs(prev)) {
+      nearbyPlanetSentiment.set(line.planet, sentimentScore);
+    }
+  }
 
   // Get current activations
   const allActivations = getCurrentActivations(
@@ -575,12 +619,20 @@ export function getCityActivation(
   const cityWindows = windows.filter((w) => nearbyPlanets.has(w.natalPlanet));
   const nextActivation = cityWindows.length > 0 ? cityWindows[0] : null;
 
-  // Best visit window: look for harmonious transits (trine, sextile, conjunction with benefics)
-  const beneficTransits = ["jupiter", "venus", "sun"];
-  const bestVisitWindow = cityWindows.find((w) =>
-    beneficTransits.includes(w.transitPlanet) &&
-    (w.aspect === "trine" || w.aspect === "sextile" || w.aspect === "conjunction")
-  ) || null;
+  // Most supportive visit window:
+  // combines transit/aspect quality with whether the natal line near this city
+  // is generally supportive or challenging.
+  const scoredWindows = cityWindows
+    .map((w) => {
+      const natalScore = nearbyPlanetSentiment.get(w.natalPlanet) ?? 0;
+      const transitScore = TRANSIT_FAVORABILITY_SCORE[w.transitPlanet] ?? 0;
+      const aspectScore = ASPECT_FAVORABILITY_SCORE[w.aspect];
+      const sourceScore = w.source === "progression" ? 0.15 : 0;
+      return { window: w, score: natalScore + transitScore + aspectScore + sourceScore };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const bestVisitWindow = scoredWindows.find((entry) => entry.score >= 1.2)?.window || null;
 
   return {
     cityName,

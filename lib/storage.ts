@@ -11,11 +11,13 @@ export type DistanceUnit = "km" | "mi";
 export interface AppSettings {
   includeMinorPlanets: boolean;
   distanceUnit: DistanceUnit;
+  hideMildImpacts: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   includeMinorPlanets: true,
   distanceUnit: "km",
+  hideMildImpacts: false,
 };
 
 const KM_TO_MI = 0.621371;
@@ -219,4 +221,3 @@ export async function syncOnLogin(): Promise<void> {
   await syncProfilesToServer();
   await fetchProfilesFromServer();
 }
-
