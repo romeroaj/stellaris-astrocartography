@@ -20,7 +20,7 @@ interface AuthContextType {
     isLoggedIn: boolean;
     login: (token: string, user: AuthUser) => Promise<void>;
     logout: () => Promise<void>;
-    refreshUser: () => Promise<void>;
+    refreshUser: () => Promise<boolean>;
     updateUser: (updates: Partial<AuthUser>) => void;
 }
 
@@ -30,7 +30,7 @@ const AuthContext = createContext<AuthContextType>({
     isLoggedIn: false,
     login: async () => { },
     logout: async () => { },
-    refreshUser: async () => { },
+    refreshUser: async () => false,
     updateUser: () => { },
 });
 
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const access_token = params.access_token;
             const refresh_token = params.refresh_token;
             if (access_token) {
-                supabase.auth.setSession({ access_token, refresh_token: refresh_token ?? "" }).then(() => fetchAppUser());
+                supabase?.auth.setSession({ access_token, refresh_token: refresh_token ?? "" }).then(() => fetchAppUser());
             }
         };
         Linking.getInitialURL().then((url) => url && parseAndSetSession(url));
@@ -128,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const res = await authFetch<{ user: AuthUser }>("GET", "/api/auth/me");
         if (res.status === 200 && res.data?.user) {
             setUser(res.data.user);
+            syncOnLogin().catch(() => { });
             return true;
         }
         if (res.status !== 200 && res.error) {

@@ -284,11 +284,10 @@ export default function LineDetailScreen() {
               <Ionicons name="checkmark-circle-outline" size={18} color={Colors.dark.success} />
               <Text style={styles.sectionTitle}>Best For</Text>
             </View>
-            <View style={styles.listContainer}>
+            <View style={styles.tagsContainer}>
               {interp.bestFor.map((item, i) => (
-                <View key={i} style={styles.listItem}>
-                  <View style={[styles.listDot, { backgroundColor: Colors.dark.success }]} />
-                  <Text style={styles.listText}>{item}</Text>
+                <View key={i} style={[styles.tag, { backgroundColor: Colors.dark.success + "18" }]}>
+                  <Text style={[styles.tagText, { color: Colors.dark.success }]}>{item}</Text>
                 </View>
               ))}
             </View>
@@ -301,11 +300,10 @@ export default function LineDetailScreen() {
               <Ionicons name="warning-outline" size={18} color={Colors.dark.danger} />
               <Text style={styles.sectionTitle}>Challenges</Text>
             </View>
-            <View style={styles.listContainer}>
+            <View style={styles.tagsContainer}>
               {interp.challenges.map((item, i) => (
-                <View key={i} style={styles.listItem}>
-                  <View style={[styles.listDot, { backgroundColor: Colors.dark.danger }]} />
-                  <Text style={styles.listText}>{item}</Text>
+                <View key={i} style={[styles.tag, { backgroundColor: Colors.dark.danger + "18" }]}>
+                  <Text style={[styles.tagText, { color: Colors.dark.danger }]}>{item}</Text>
                 </View>
               ))}
             </View>

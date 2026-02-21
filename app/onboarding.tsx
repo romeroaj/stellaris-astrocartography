@@ -261,12 +261,24 @@ export default function OnboardingScreen() {
           </Text>
           <Ionicons name="arrow-forward" size={20} color={Colors.dark.background} />
         </Pressable>
-        <Pressable
-          style={({ pressed }) => [styles.skipButton, pressed && { opacity: 0.6 }]}
-          onPress={handleSkip}
-        >
-          <Text style={styles.skipButtonText}>Skip, explore with demo data</Text>
-        </Pressable>
+        <View style={styles.secondaryFtuxButtons}>
+          <Pressable
+            style={({ pressed }) => [styles.signInButton, pressed && { opacity: 0.6 }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              router.replace("/auth");
+            }}
+          >
+            <Text style={styles.signInButtonText}>Sign In</Text>
+          </Pressable>
+          <View style={styles.buttonDivider} />
+          <Pressable
+            style={({ pressed }) => [styles.skipButton, pressed && { opacity: 0.6 }]}
+            onPress={handleSkip}
+          >
+            <Text style={styles.skipButtonText}>Skip with Demo Data</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -654,6 +666,24 @@ const styles = StyleSheet.create({
   },
   ftuxDotActive: { backgroundColor: Colors.dark.primary },
   ftuxButtons: { gap: 12 },
+  secondaryFtuxButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+    paddingVertical: 12,
+  },
+  signInButton: { alignItems: "center" },
+  signInButtonText: {
+    fontSize: 14,
+    fontFamily: "Outfit_600SemiBold",
+    color: Colors.dark.primary,
+  },
+  buttonDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: Colors.dark.cardBorder,
+  },
   formContent: { flex: 1, paddingTop: 12, gap: 16 },
   stepTitle: {
     fontSize: 28,

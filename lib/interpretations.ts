@@ -20,6 +20,14 @@ export interface SideOfLineInfo {
   eastDesc: string;
 }
 
+/** Angle phrasing for synthesis: emanating vs receiving. Use when building dynamic sentences. */
+export const ANGLE_PHRASING: Record<LineType, string[]> = {
+  ASC: ["You embody…", "You project…"],
+  DSC: ["You attract…", "Others bring…"],
+  MC: ["You are seen as…", "You achieve…"],
+  IC: ["You feel…", "You belong…"],
+};
+
 const interpretations: Record<string, Interpretation> = {
   "sun-MC": {
     title: "Sun on the Midheaven",

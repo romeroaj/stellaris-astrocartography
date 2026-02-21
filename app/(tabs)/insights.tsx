@@ -39,7 +39,12 @@ import {
 import { WORLD_CITIES as CITY_LIST } from "@/lib/cities";
 import { filterAstroLines, filterNearbyByImpact } from "@/lib/settings";
 import { useFriendView } from "@/lib/FriendViewContext";
-import { getCurrentActivations } from "@/lib/transits";
+import {
+  getCurrentActivations,
+  getTransitSynthesis,
+  type TransitSynthesisRange,
+  type TransitSynthesis,
+} from "@/lib/transits";
 import TimeScrubber from "@/components/TimeScrubber";
 import * as Location from "expo-location";
 
@@ -111,6 +116,10 @@ export default function InsightsScreen() {
   // Cyclocartography time state
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeLines, setActiveLines] = useState<LineActivation[]>([]);
+
+  // Transit synthesis: best/worst places in 1m/3m/1y
+  const [synthesisRange, setSynthesisRange] = useState<TransitSynthesisRange>("3m");
+  const [transitSynthesis, setTransitSynthesis] = useState<TransitSynthesis | null>(null);
 
   // City search
   const [searchQuery, setSearchQuery] = useState("");
@@ -202,6 +211,20 @@ export default function InsightsScreen() {
       setActiveLines([]);
     }
   }, [profile, selectedDate]);
+
+  // Transit synthesis: best/intense places in 1m/3m/1y
+  useEffect(() => {
+    if (!profile) { setTransitSynthesis(null); return; }
+    try {
+      const syn = getTransitSynthesis(
+        profile.date, profile.time, profile.longitude,
+        synthesisRange, undefined, hideMildImpacts
+      );
+      setTransitSynthesis(syn);
+    } catch {
+      setTransitSynthesis(null);
+    }
+  }, [profile, synthesisRange, hideMildImpacts]);
 
   const astroLines = useMemo(() => {
     if (!profile) return [];
@@ -734,6 +757,85 @@ export default function InsightsScreen() {
               onDateChange={setSelectedDate}
               compact={false}
             />
+
+            {/* When & Where: best/intense places in 1m/3m/1y */}
+            {transitSynthesis && (transitSynthesis.optimal.length > 0 || transitSynthesis.intense.length > 0) && (
+              <View style={styles.summarySection}>
+                <View style={styles.sectionHeaderRow}>
+                  <Ionicons name="calendar-outline" size={18} color={Colors.dark.primary} />
+                  <Text style={[styles.sectionTitle, { flex: 1 }]}>When & Where</Text>
+                </View>
+                <Text style={styles.sectionDesc}>
+                  Best and most impactful places to visit in the next period, based on transit activations.
+                </Text>
+                <View style={styles.synthesisRangeRow}>
+                  {(["1m", "3m", "1y"] as TransitSynthesisRange[]).map((r) => (
+                    <Pressable
+                      key={r}
+                      style={[styles.synthesisRangeBtn, synthesisRange === r && styles.synthesisRangeBtnActive]}
+                      onPress={() => { setSynthesisRange(r); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                    >
+                      <Text style={[styles.synthesisRangeText, synthesisRange === r && styles.synthesisRangeTextActive]}>
+                        {r === "1m" ? "1 month" : r === "3m" ? "3 months" : "1 year"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {transitSynthesis.optimal.length > 0 && (
+                  <View style={styles.synthesisListSection}>
+                    <Text style={[styles.synthesisListTitle, { color: SENTIMENT_COLORS.positive }]}>Optimal for flow</Text>
+                    {transitSynthesis.optimal.slice(0, 5).map((c, i) => (
+                      <Pressable
+                        key={`opt-${c.name}-${i}`}
+                        style={({ pressed }) => [styles.synthesisCityRow, pressed && { opacity: 0.7 }]}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          const p: Record<string, string> = { name: c.name, country: c.country, lat: String(c.lat), lon: String(c.lon) };
+                          if (isFriendView && effectiveFriendId && effectiveFriendName) {
+                            p.viewFriendId = effectiveFriendId;
+                            p.viewFriendName = effectiveFriendName;
+                          }
+                          router.push({ pathname: "/city-detail", params: p });
+                        }}
+                      >
+                        <Text style={styles.synthesisCityName}>{c.name}, {c.country}</Text>
+                        {c.topWindow?.shortLabel && (
+                          <Text style={[styles.synthesisCityBadge, { color: SENTIMENT_COLORS.positive }]}>{c.topWindow.shortLabel}</Text>
+                        )}
+                        <Ionicons name="chevron-forward" size={14} color={Colors.dark.textMuted} />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+                {transitSynthesis.intense.length > 0 && (
+                  <View style={styles.synthesisListSection}>
+                    <Text style={[styles.synthesisListTitle, { color: SENTIMENT_COLORS.difficult }]}>Intense / transformative</Text>
+                    {transitSynthesis.intense.slice(0, 5).map((c, i) => (
+                      <Pressable
+                        key={`int-${c.name}-${i}`}
+                        style={({ pressed }) => [styles.synthesisCityRow, pressed && { opacity: 0.7 }]}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          const p: Record<string, string> = { name: c.name, country: c.country, lat: String(c.lat), lon: String(c.lon) };
+                          if (isFriendView && effectiveFriendId && effectiveFriendName) {
+                            p.viewFriendId = effectiveFriendId;
+                            p.viewFriendName = effectiveFriendName;
+                          }
+                          router.push({ pathname: "/city-detail", params: p });
+                        }}
+                      >
+                        <Text style={styles.synthesisCityName}>{c.name}, {c.country}</Text>
+                        {c.topWindow?.shortLabel && (
+                          <Text style={[styles.synthesisCityBadge, { color: SENTIMENT_COLORS.difficult }]}>{c.topWindow.shortLabel}</Text>
+                        )}
+                        <Ionicons name="chevron-forward" size={14} color={Colors.dark.textMuted} />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
             {activeLines.length > 0 ? (
               <View style={styles.activeLinesList}>
                 {activeLines.slice(0, 8).map((activation, i) => {
@@ -1103,4 +1205,26 @@ const styles = StyleSheet.create({
     fontSize: 13, fontFamily: "Outfit_400Regular", color: Colors.dark.textMuted,
     textAlign: "center", lineHeight: 19,
   },
+
+  // ── Transit synthesis (When & Where) ──
+  synthesisRangeRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  synthesisRangeBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    backgroundColor: Colors.dark.card, borderWidth: 1, borderColor: Colors.dark.cardBorder,
+    alignItems: "center", justifyContent: "center",
+  },
+  synthesisRangeBtnActive: {
+    backgroundColor: Colors.dark.primaryMuted, borderColor: Colors.dark.primary,
+  },
+  synthesisRangeText: { fontSize: 13, fontFamily: "Outfit_600SemiBold", color: Colors.dark.textSecondary },
+  synthesisRangeTextActive: { color: Colors.dark.primary },
+  synthesisListSection: { marginTop: 12 },
+  synthesisListTitle: { fontSize: 14, fontFamily: "Outfit_600SemiBold", marginBottom: 8 },
+  synthesisCityRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: Colors.dark.card, borderRadius: 10, padding: 12, marginBottom: 6,
+    borderWidth: 1, borderColor: Colors.dark.cardBorder,
+  },
+  synthesisCityName: { flex: 1, fontSize: 14, fontFamily: "Outfit_500Medium", color: Colors.dark.text },
+  synthesisCityBadge: { fontSize: 11, fontFamily: "Outfit_600SemiBold" },
 });

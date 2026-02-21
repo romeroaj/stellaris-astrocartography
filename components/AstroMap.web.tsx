@@ -20,6 +20,7 @@ interface AstroMapProps {
   ccgDualTone?: boolean;
   showOverlapHighlights?: boolean;
   onHotspotPress?: (hotspot: MapHotspot) => void;
+  onRegionChangeComplete?: (region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) => void;
 }
 
 let leafletLoaded = false;
@@ -68,6 +69,7 @@ const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapW
     ccgDualTone = false,
     showOverlapHighlights,
     onHotspotPress,
+    onRegionChangeComplete,
   },
   ref
 ) {
@@ -112,9 +114,15 @@ const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapW
 
     const isSynOverlap = bondModeRef.current === "synastry" && showOverlapRef.current;
 
-    // Draw visible lines (Leaflet doesn't have the iOS native overlay bug,
-    // so we can simply skip hidden lines instead of rendering them transparent)
-    linesRef.current.filter((l) => !l.hidden).forEach((line) => {
+    const validLines = linesRef.current.filter(
+      (l) => Array.isArray(l.points) && l.points.length >= 2
+    );
+    validLines.forEach((line) => {
+      const coords = line.points
+        .map((pt) => [pt?.latitude, pt?.longitude] as [number, number])
+        .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+      if (coords.length < 2) return;
+
       let color: string;
       if (!isSynOverlap && bondModeRef.current !== "synastry" && ccgDualToneRef.current) {
         color = line.sourceId === "transit" ? "#7DD3FC" : "#E8E2D6";
@@ -156,8 +164,6 @@ const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapW
       } else {
         opacity = 0.85;
       }
-
-      const coords = line.points.map((pt) => [pt.latitude, pt.longitude] as [number, number]);
 
       if (line.sourceId === "transit" && ccgDualToneRef.current) {
         const glow = L.polyline(coords, {
@@ -238,6 +244,7 @@ const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapW
 
   useEffect(() => {
     let mounted = true;
+    let tooltipStyleEl: HTMLStyleElement | null = null;
 
     loadLeaflet().then(() => {
       if (!mounted || !containerRef.current) return;
@@ -245,11 +252,18 @@ const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapW
       if (!L) return;
 
       if (mapRef.current) {
-        mapRef.current.remove();
+        try {
+          mapRef.current.remove();
+        } catch (_) { }
+        mapRef.current = null;
       }
+      layerGroupRef.current = null;
+
+      const lat = Number.isFinite(birthLat) ? birthLat : 30;
+      const lng = Number.isFinite(birthLon) ? birthLon : 0;
 
       const map = L.map(containerRef.current, {
-        center: [birthLat, birthLon],
+        center: [lat, lng],
         zoom: 2,
         minZoom: 2,
         maxZoom: 8,
@@ -266,8 +280,8 @@ const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapW
         }
       ).addTo(map);
 
-      const tooltipStyle = document.createElement("style");
-      tooltipStyle.textContent = `
+      tooltipStyleEl = document.createElement("style");
+      tooltipStyleEl.textContent = `
         .astro-tooltip {
           background: rgba(15, 21, 53, 0.92) !important;
           color: #E8E6F0 !important;
@@ -291,7 +305,7 @@ const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapW
           background: rgba(30, 40, 80, 0.95) !important;
         }
       `;
-      document.head.appendChild(tooltipStyle);
+      document.head.appendChild(tooltipStyleEl);
 
       const birthIcon = L.divIcon({
         className: "",
@@ -304,18 +318,45 @@ const AstroMapWeb = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMapW
         iconSize: [16, 16],
         iconAnchor: [8, 8],
       });
-      L.marker([birthLat, birthLon], { icon: birthIcon }).addTo(map);
+      L.marker([lat, lng], { icon: birthIcon }).addTo(map);
 
       layerGroupRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
+
+      if (onRegionChangeComplete) {
+        const fireRegion = () => {
+          const c = map.getCenter();
+          const b = map.getBounds();
+          const latDelta = b.getNorth() - b.getSouth();
+          const lonDelta = Math.min(b.getEast() - b.getWest(), 360);
+          onRegionChangeComplete({
+            latitude: c.lat,
+            longitude: c.lng,
+            latitudeDelta: latDelta,
+            longitudeDelta: lonDelta,
+          });
+        };
+        map.on("moveend", fireRegion);
+        fireRegion();
+      }
 
       updateLines();
     });
 
     return () => {
       mounted = false;
+      if (tooltipStyleEl?.parentNode) {
+        tooltipStyleEl.parentNode.removeChild(tooltipStyleEl);
+      }
+      if (mapRef.current) {
+        try {
+          mapRef.current.remove();
+        } catch (_) { }
+        mapRef.current = null;
+      }
+      layerGroupRef.current = null;
     };
-  }, [birthLat, birthLon]);
+  }, [birthLat, birthLon, onRegionChangeComplete]);
 
   useEffect(() => {
     updateLines();

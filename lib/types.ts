@@ -60,12 +60,7 @@ export interface AstroLine {
   overlapClassification?: OverlapClassification;
   /** Proximity in degrees to the other person's matching line */
   overlapProximityDeg?: number;
-  /**
-   * When true the polyline stays mounted on the native map but is rendered
-   * fully transparent.  This works around a react-native-maps iOS bug where
-   * removing a <Polyline> component doesn't remove the native MKOverlay.
-   */
-  hidden?: boolean;
+
 }
 
 /** Jim Lewis influence levels based on distance from planetary line */
@@ -127,6 +122,10 @@ export interface ActivationWindow {
   exactDate: string;
   /** Peak intensity description */
   peakDescription: string;
+  /** Tiered type: benefic = "best time to visit"; evolutionary = transformative/challenging */
+  windowType?: "benefic" | "evolutionary" | "neutral";
+  /** Short label for display, e.g. "Abundance Peak", "Deep Transformation" */
+  shortLabel?: string;
 }
 
 /** A single currently-active line activation for display */

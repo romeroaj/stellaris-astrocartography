@@ -28,7 +28,10 @@ import {
   calculateGST,
   generateAstroLines,
   findNearestLines,
+  calculateParanLines,
+  findNearbyParans,
   SideOfLine,
+  type ParanLine,
 } from "@/lib/astronomy";
 import { getSettings } from "@/lib/storage";
 import { filterAstroLines, filterNearbyByImpact } from "@/lib/settings";
@@ -39,6 +42,7 @@ import {
 } from "@/lib/lineClassification";
 import { useFocusEffect } from "expo-router";
 import { getCityActivation } from "@/lib/transits";
+import { getLocationSynthesis, type LocationSynthesis } from "@/lib/synthesis";
 import TimeScrubber from "@/components/TimeScrubber";
 
 // ── Signal strength bars ──────────────────────────────────────────
@@ -127,6 +131,8 @@ export default function CityDetailScreen() {
   const [distanceUnit, setDistanceUnit] = React.useState<DistanceUnit>("km");
   const [hideMildImpacts, setHideMildImpacts] = React.useState(false);
   const [cityActivation, setCityActivation] = React.useState<CityActivation | null>(null);
+  const [synthesis, setSynthesis] = React.useState<LocationSynthesis | null>(null);
+  const [nearbyParans, setNearbyParans] = React.useState<ParanLine[]>([]);
   const [analysisProfile, setAnalysisProfile] = React.useState<BirthData | null>(null);
   const [selectedDate, setSelectedDate] = React.useState(new Date());
   const [activeTab, setActiveTab] = React.useState<CityDetailTab>("summary");
@@ -142,7 +148,7 @@ export default function CityDetailScreen() {
     }, [name, lat, lon, friendId, friendName])
   );
 
-  // Re-compute activations when date changes (without re-analyzing all lines)
+  // Re-compute activations and synthesis when date changes (without re-analyzing all lines)
   React.useEffect(() => {
     if (!lat || !lon || loading || !analysisProfile) return;
     try {
@@ -151,10 +157,17 @@ export default function CityDetailScreen() {
         analysisProfile.date, analysisProfile.time, analysisProfile.longitude, selectedDate, hideMildImpacts
       );
       setCityActivation(activation);
+      const syn = getLocationSynthesis(analysisProfile, parseFloat(lat), parseFloat(lon), {
+        hideMildImpacts,
+        targetDate: selectedDate,
+        cityName: name || "",
+        includeMinorPlanets,
+      });
+      setSynthesis(syn);
     } catch (e) {
-      console.error("Error recomputing city activation:", e);
+      console.error("Error recomputing city activation/synthesis:", e);
     }
-  }, [selectedDate, hideMildImpacts, lat, lon, loading, name, analysisProfile]);
+  }, [selectedDate, hideMildImpacts, lat, lon, loading, name, analysisProfile, includeMinorPlanets]);
 
   const analyze = async () => {
     if (!lat || !lon) { setLoading(false); return; }
@@ -214,6 +227,30 @@ export default function CityDetailScreen() {
       } catch (e) {
         console.error("Error computing city activation:", e);
       }
+
+      // Synthesis: Natal → ACG → Relocated → CCG
+      try {
+        const syn = getLocationSynthesis(profile, parseFloat(lat), parseFloat(lon), {
+          hideMildImpacts: s.hideMildImpacts,
+          targetDate: selectedDate,
+          cityName: name || "",
+          includeMinorPlanets: s.includeMinorPlanets,
+        });
+        setSynthesis(syn);
+      } catch (e) {
+        console.error("Error computing synthesis:", e);
+        setSynthesis(null);
+      }
+
+      // Parans: latitude highlights near this city
+      try {
+        const parans = calculateParanLines(positions, gst);
+        const nearby = findNearbyParans(parans, parseFloat(lat), 120).slice(0, 3);
+        setNearbyParans(nearby);
+      } catch (e) {
+        console.error("Error computing parans:", e);
+        setNearbyParans([]);
+      }
     } catch (e) {
       console.error("Error analyzing city:", e);
     } finally {
@@ -240,7 +277,14 @@ export default function CityDetailScreen() {
       ? SENTIMENT_COLORS.difficult
       : SENTIMENT_COLORS.neutral;
   const supportiveBaseline = positive.length >= difficult.length;
-  const visitWindowTitle = supportiveBaseline ? "Best Time to Visit" : "Most Supportive Window";
+  // Tiered labels per plan 1.2: use benefic vs evolutionary phrasing
+  const getVisitWindowLabel = (): string => {
+    const w = cityActivation?.bestVisitWindow;
+    if (!w) return supportiveBaseline ? "Best Time to Visit" : "Most Supportive Window";
+    if (w.windowType === "benefic") return "Best Time to Visit";
+    return w.shortLabel ? `Activation Window — ${w.shortLabel}` : "Activation Window";
+  };
+  const visitWindowTitle = getVisitWindowLabel();
   const visitWindowHint = supportiveBaseline
     ? "This window combines supportive transits with the local line mix."
     : "Local lines here are mixed/challenging, so this highlights the gentlest available window.";
@@ -423,6 +467,11 @@ export default function CityDetailScreen() {
               })}
             </View>
             <Text style={[styles.vibeText, { color: vibeColor }]}>{vibeText}</Text>
+            {synthesis?.paragraph ? (
+              <Text style={[styles.heroBlurbText, styles.synthesisInHero]} numberOfLines={4}>
+                {synthesis.paragraph}
+              </Text>
+            ) : null}
             <Text style={styles.heroBlurbText} numberOfLines={2}>
               <Text style={styles.heroBlurbLabel}>Living: </Text>
               {livingSummary}
@@ -481,6 +530,29 @@ export default function CityDetailScreen() {
 
           {activeTab === "summary" && (
             <>
+              {/* Synthesis now in hero section above Living/Visiting */}
+              {/* ── Latitude highlights (parans) ── */}
+              {nearbyParans.length > 0 && (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Ionicons name="ellipse-outline" size={18} color={Colors.dark.textMuted} />
+                    <Text style={[styles.sectionTitle, { color: Colors.dark.textMuted }]}>Latitude Highlights</Text>
+                    <View style={[styles.countBadge, { backgroundColor: Colors.dark.textMuted + "18" }]}>
+                      <Text style={[styles.countText, { color: Colors.dark.textMuted }]}>{nearbyParans.length}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.sectionDesc}>
+                    Hidden influence at this latitude: two planets were on angles simultaneously at your birth.
+                  </Text>
+                  {nearbyParans.map((p, idx) => (
+                    <View key={`${p.planet1}-${p.planet2}-${p.latitude}-${idx}`} style={styles.paranRow}>
+                      <Text style={styles.paranLabel}>
+                        {getPlanetSymbol(p.planet1)}–{getPlanetSymbol(p.planet2)} energy at this latitude
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
               {/* ── Top themes ── */}
               {topThemes.length > 0 && (
                 <View style={styles.section}>
@@ -921,6 +993,30 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
     marginBottom: 12,
     lineHeight: 19,
+  },
+  synthesisParagraph: {
+    fontSize: 15,
+    fontFamily: "Outfit_400Regular",
+    color: Colors.dark.text,
+    lineHeight: 24,
+  },
+  synthesisInHero: {
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  paranRow: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.dark.card,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.dark.cardBorder,
+  },
+  paranLabel: {
+    fontSize: 14,
+    fontFamily: "Outfit_500Medium",
+    color: Colors.dark.textSecondary,
   },
   summaryLineList: {
     gap: 8,

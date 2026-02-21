@@ -231,8 +231,26 @@ For inner planets (Sun through Mars), we use **progressions** because they trans
 - Overall activation strength badge (Peak, Active, Building, Quiet)
 - Compact TimeScrubber for date navigation
 - Per-city transit list showing which lines are activated
-- "Best Time to Visit" card with date range + description
+- "Best Time to Visit" card with date range + description (tiered labels per transit type)
 - "Next Activation" fallback when no current transits
+
+#### Phase 2 Refinements (Completed)
+
+- **Transit synthesis:** When & Where — best/intense places to visit in 1 month, 3 months, or 1 year (Insights > Transits tab)
+- **Tiered timing verbiage:** Replace generic "Best Time to Visit" with transit-specific labels — benefic (Jupiter/Venus) vs evolutionary (Saturn/Pluto/Uranus/Mars)
+- **City detail UI:** Synthesis paragraph ("Your story here") moved to top of hero; Living/Visiting blurbs below
+- **Line cards:** bestFor and challenges rendered as horizontal chips (like themes)
+- **Map zoom–dependent city density:** Hotspots and transit glows show more cities when zoomed in, fewer when zoomed out
+
+**Timing copy (canonical tiered phrasing):**
+
+| Transit type | App phrasing |
+|--------------|--------------|
+| Jupiter/Venus (trine/conjunct) | "Optimal Window for Flow", "Abundance Peak" |
+| Saturn | "Growth through Discipline", "Structure Phase" |
+| Pluto | "Deep Transformation", "Personal Alchemy" |
+| Uranus | "Unpredictable Breakthroughs", "Sudden Pivot" |
+| Mars | "Action Phase", "High Energy" |
 
 ### Why This Is the Subscription Killer Feature
 1. **Daily/weekly engagement** — "What's active on my map right now?" gives users a reason to open the app constantly
@@ -274,6 +292,14 @@ Unlike daily horoscopes that become noise, Stellaris notifications are **rare, s
 - Tap a month to see which cities are "lit up" and why
 - Categories: Travel, Career, Love, Growth, Caution
 - Export to device calendar
+
+---
+
+## Future / Not planned (consumer app scope)
+
+- **Geodetics:** Full geodetic map overlays are not in scope for the consumer product; the app focuses on standard ACG lines and synthesis.
+- **Advanced timing:** Zodiacal Releasing, Primary Directions, and similar techniques are out of scope; we stick to **transits + progressions** (CCG) for "when" and high-impact alerts.
+- **Aspect lines on map:** Primary map remains **conjunction-only** (planet on angle). Aspect lines (e.g. trine/square lines) are a possible **next-phase** feature (major aspects only, synthesis-first); see Relocated Chart & Synthesis plan.
 
 ---
 

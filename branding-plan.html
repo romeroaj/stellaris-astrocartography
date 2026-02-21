@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stellaris → ? — Astrocartography App Branding Plan</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080F;
+  --surface: #111119;
+  --surface2: #191923;
+  --border: #252533;
+  --text: #E8E4F0;
+  --text2: #9B95AA;
+  --text3: #5E586E;
+  --accent: #A78BFA;
+  --accent2: #7C3AED;
+  --warm: #F59E8B;
+  --teal: #5EEAD4;
+  --gold: #FBBF24;
+  --rose: #F472B6;
+  --blue: #60A5FA;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family:'DM Sans',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.7;
+  font-size:15px;
+  overflow-x:hidden;
+}
+.page { max-width:900px; margin:0 auto; padding:0 32px 120px; }
+
+/* Hero */
+.hero {
+  padding:80px 0 60px;
+  text-align:center;
+  position:relative;
+}
+.hero::before {
+  content:'';
+  position:absolute;
+  top:-100px;
+  left:50%;
+  transform:translateX(-50%);
+  width:600px;
+  height:600px;
+  background:radial-gradient(circle,rgba(167,139,250,0.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+.hero-label {
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  letter-spacing:3px;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin-bottom:20px;
+}
+.hero h1 {
+  font-family:'Instrument Serif',serif;
+  font-size:clamp(42px,6vw,72px);
+  font-weight:400;
+  line-height:1.1;
+  color:var(--text);
+  margin-bottom:16px;
+}
+.hero h1 em { font-style:italic; color:var(--accent); }
+.hero-sub {
+  font-size:17px;
+  color:var(--text2);
+  max-width:560px;
+  margin:0 auto;
+}
+
+/* TOC */
+.toc {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:28px 32px;
+  margin:48px 0;
+}
+.toc-title {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  letter-spacing:3px;
+  text-transform:uppercase;
+  color:var(--text3);
+  margin-bottom:16px;
+}
+.toc-grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px 32px;
+}
+.toc a {
+  color:var(--text2);
+  text-decoration:none;
+  font-size:14px;
+  padding:4px 0;
+  transition:color .2s;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.toc a:hover { color:var(--accent); }
+.toc-num {
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  color:var(--text3);
+  min-width:24px;
+}
+
+/* Sections */
+.section { margin-top:72px; }
+.section-label {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  letter-spacing:3px;
+  text-transform:uppercase;
+  color:var(--accent);
+  margin-bottom:12px;
+}
+.section h2 {
+  font-family:'Instrument Serif',serif;
+  font-size:clamp(28px,4vw,40px);
+  font-weight:400;
+  line-height:1.2;
+  margin-bottom:20px;
+}
+.section h3 {
+  font-family:'Instrument Serif',serif;
+  font-size:22px;
+  font-weight:400;
+  margin:32px 0 12px;
+  color:var(--text);
+}
+p { color:var(--text2); margin-bottom:16px; }
+strong { color:var(--text); font-weight:600; }
+
+/* Cards */
+.card-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:24px 0; }
+.card-grid.three { grid-template-columns:1fr 1fr 1fr; }
+.card {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:22px;
+}
+.card.accent-border { border-color:var(--accent2); }
+.card-label {
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  color:var(--text3);
+  margin-bottom:8px;
+}
+.card-title {
+  font-size:17px;
+  font-weight:600;
+  color:var(--text);
+  margin-bottom:6px;
+}
+.card-desc { font-size:13px; color:var(--text2); line-height:1.6; margin:0; }
+.card-tag {
+  display:inline-block;
+  font-size:11px;
+  font-weight:500;
+  padding:3px 10px;
+  border-radius:20px;
+  margin-top:10px;
+}
+
+/* Competitor Cards */
+.competitor {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:24px;
+  margin:16px 0;
+  display:flex;
+  gap:20px;
+  align-items:flex-start;
+}
+.comp-logo {
+  width:56px;
+  height:56px;
+  border-radius:14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  font-weight:700;
+  flex-shrink:0;
+}
+.comp-body { flex:1; }
+.comp-name { font-size:18px; font-weight:600; color:var(--text); }
+.comp-meta { font-size:12px; color:var(--text3); margin-bottom:8px; }
+.comp-desc { font-size:13px; color:var(--text2); line-height:1.6; margin:0; }
+.comp-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.comp-tag {
+  font-size:11px;
+  padding:3px 10px;
+  border-radius:20px;
+  background:var(--surface2);
+  color:var(--text2);
+  border:1px solid var(--border);
+}
+
+/* Name Options */
+.name-option {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:28px;
+  margin:16px 0;
+  position:relative;
+  overflow:hidden;
+}
+.name-option.recommended {
+  border-color:var(--accent2);
+  background:linear-gradient(135deg,rgba(167,139,250,0.06),var(--surface));
+}
+.name-option.recommended::after {
+  content:'★ TOP PICK';
+  position:absolute;
+  top:16px;
+  right:16px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  letter-spacing:2px;
+  color:var(--accent);
+  background:rgba(167,139,250,0.15);
+  padding:4px 12px;
+  border-radius:20px;
+}
+.name-big {
+  font-family:'Instrument Serif',serif;
+  font-size:36px;
+  font-weight:400;
+  color:var(--text);
+  margin-bottom:4px;
+}
+.name-phonetic {
+  font-family:'JetBrains Mono',monospace;
+  font-size:12px;
+  color:var(--text3);
+  margin-bottom:12px;
+}
+.name-rationale { font-size:14px; color:var(--text2); line-height:1.7; }
+.name-checks {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:14px;
+}
+.name-check {
+  font-size:11px;
+  padding:4px 12px;
+  border-radius:20px;
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+.name-check.good { background:rgba(94,234,212,0.1); color:var(--teal); }
+.name-check.warn { background:rgba(251,191,36,0.1); color:var(--gold); }
+.name-check.bad { background:rgba(244,114,182,0.1); color:var(--rose); }
+
+/* Color Palettes */
+.palette-row { display:flex; gap:8px; margin:16px 0; flex-wrap:wrap; }
+.swatch {
+  width:72px;
+  height:72px;
+  border-radius:14px;
+  position:relative;
+  cursor:pointer;
+  transition:transform .2s;
+}
+.swatch:hover { transform:scale(1.08); }
+.swatch-label {
+  position:absolute;
+  bottom:6px;
+  left:6px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;
+  color:rgba(255,255,255,0.7);
+  background:rgba(0,0,0,0.4);
+  padding:2px 6px;
+  border-radius:6px;
+}
+
+/* Influencer */
+.influencer {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px;
+  margin:12px 0;
+}
+.infl-row { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+.infl-avatar {
+  width:40px;
+  height:40px;
+  border-radius:20px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+}
+.infl-name { font-size:15px; font-weight:600; color:var(--text); }
+.infl-handle { font-size:12px; color:var(--accent); }
+.infl-stats {
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;
+  color:var(--text3);
+}
+.infl-desc { font-size:13px; color:var(--text2); line-height:1.6; margin:0; }
+
+/* Tone Examples */
+.tone-example {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px 24px;
+  margin:12px 0;
+  font-size:15px;
+  color:var(--text);
+  font-style:italic;
+  position:relative;
+}
+.tone-example::before {
+  content:'"';
+  font-family:'Instrument Serif',serif;
+  font-size:48px;
+  color:var(--accent);
+  position:absolute;
+  top:4px;
+  left:16px;
+  opacity:.4;
+}
+.tone-label {
+  display:block;
+  font-style:normal;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  color:var(--text3);
+  margin-top:10px;
+}
+
+/* Divider */
+.divider {
+  height:1px;
+  background:var(--border);
+  margin:48px 0;
+}
+
+/* Table */
+.comparison-table {
+  width:100%;
+  border-collapse:collapse;
+  margin:20px 0;
+  font-size:13px;
+}
+.comparison-table th {
+  text-align:left;
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  color:var(--text3);
+  padding:12px 16px;
+  border-bottom:1px solid var(--border);
+}
+.comparison-table td {
+  padding:12px 16px;
+  border-bottom:1px solid var(--border);
+  color:var(--text2);
+  vertical-align:top;
+}
+.comparison-table tr:hover td { background:var(--surface); }
+.comparison-table td:first-child { color:var(--text); font-weight:500; }
+
+/* Responsive */
+@media (max-width:700px) {
+  .page { padding:0 20px 80px; }
+  .card-grid, .card-grid.three { grid-template-columns:1fr; }
+  .toc-grid { grid-template-columns:1fr; }
+  .competitor { flex-direction:column; }
+  .palette-row { justify-content:center; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-label">Branding Strategy & Research</div>
+  <h1>Your Astrocartography App<br>Deserves <em>Magnetic</em> Branding</h1>
+  <p class="hero-sub">A comprehensive brand plan covering naming, visual identity, competitive positioning, influencer strategy, and messaging tone — built from deep research into the astrology app market.</p>
+</div>
+
+<!-- TOC -->
+<nav class="toc">
+  <div class="toc-title">Contents</div>
+  <div class="toc-grid">
+    <a href="#landscape"><span class="toc-num">01</span> Competitive Landscape</a>
+    <a href="#naming"><span class="toc-num">02</span> Naming Strategy</a>
+    <a href="#identity"><span class="toc-num">03</span> Visual Identity</a>
+    <a href="#tone"><span class="toc-num">04</span> Messaging & Tone</a>
+    <a href="#influencers"><span class="toc-num">05</span> Influencer Map</a>
+    <a href="#positioning"><span class="toc-num">06</span> Positioning & Differentiation</a>
+    <a href="#social"><span class="toc-num">07</span> Social Media Strategy</a>
+    <a href="#launch"><span class="toc-num">08</span> Launch Playbook</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 01 COMPETITIVE LANDSCAPE -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="landscape">
+  <div class="section-label">01 — Market Intel</div>
+  <h2>The Competitive Landscape</h2>
+  <p>The astrology app market hit <strong>$4.02B in 2024</strong> and is projected to reach <strong>$29.82B by 2033</strong> (24.93% CAGR). But here's the key insight: <strong>astrocartography is a massively underserved niche</strong> within this booming market. Most apps focus on daily horoscopes and natal charts. The location-astrology space has no clear winner yet.</p>
+
+  <h3>Top Astrology Brands (Your Aspirational Peers)</h3>
+
+  <div class="competitor">
+    <div class="comp-logo" style="background:#000;color:#fff;font-family:serif;">✦</div>
+    <div class="comp-body">
+      <div class="comp-name">Co–Star</div>
+      <div class="comp-meta">20M+ downloads · 2x App of the Day · #1 most-discussed astrology app</div>
+      <p class="comp-desc"><strong>Aesthetic:</strong> Stark black & white minimalism. No clutter. NASA data positioning gives scientific credibility. <strong>Tone:</strong> Sharp, edgy, "biting truth" push notifications that go viral on Twitter. Blunt to the point of feeling personal. <strong>Design principle:</strong> Ockham's Razor — maximum reduction. <strong>Key lesson:</strong> Personality-driven copy drives shareability. Their notifications ARE their marketing.</p>
+      <div class="comp-tags">
+        <span class="comp-tag">Minimalist</span>
+        <span class="comp-tag">Edgy tone</span>
+        <span class="comp-tag">B&W palette</span>
+        <span class="comp-tag">AI-powered</span>
+        <span class="comp-tag">Social-first</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="competitor">
+    <div class="comp-logo" style="background:linear-gradient(135deg,#C4B5FD,#A78BFA);color:#fff;">C</div>
+    <div class="comp-body">
+      <div class="comp-name">CHANI</div>
+      <div class="comp-meta">#1 highest-grossing astrology app (Nov 2025) · 2x App of the Day</div>
+      <p class="comp-desc"><strong>Aesthetic:</strong> Pastel purple/lavender, collage-art "zine" style. Warm, handmade, intentionally non-corporate. <strong>Tone:</strong> Affirming, inclusive, feminist/queer-led. Empowering without being prescriptive. <strong>Values:</strong> Donates 5% profits to gender-based violence survivors. No AI-generated content — all human-written. <strong>Key lesson:</strong> Values-driven branding creates cult following. Featured by Lizzo, Vanity Fair, NYT.</p>
+      <div class="comp-tags">
+        <span class="comp-tag">Pastel purple</span>
+        <span class="comp-tag">Warm/affirming</span>
+        <span class="comp-tag">Zine aesthetic</span>
+        <span class="comp-tag">Cause-driven</span>
+        <span class="comp-tag">Human-crafted</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="competitor">
+    <div class="comp-logo" style="background:linear-gradient(135deg,#1E293B,#334155);color:#94A3B8;">◎</div>
+    <div class="comp-body">
+      <div class="comp-name">The Pattern</div>
+      <div class="comp-meta">Deep psychological insights · Celebrity endorsements (Channing Tatum)</div>
+      <p class="comp-desc"><strong>Aesthetic:</strong> Dark, moody, introspective. Less flashy than competitors. <strong>Tone:</strong> Psychological depth, almost therapy-like. Avoids traditional astrology language entirely — focuses on "timing" and "patterns." <strong>Key lesson:</strong> You can appeal to astrology-skeptics by reframing the language.</p>
+      <div class="comp-tags">
+        <span class="comp-tag">Dark/moody</span>
+        <span class="comp-tag">Psych framing</span>
+        <span class="comp-tag">No astro jargon</span>
+        <span class="comp-tag">Relationship focus</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="competitor">
+    <div class="comp-logo" style="background:linear-gradient(135deg,#6366F1,#818CF8);color:#fff;">S</div>
+    <div class="comp-body">
+      <div class="comp-name">Sanctuary</div>
+      <div class="comp-meta">Live astrologer consultations · Partnered with Moxy Hotels for astro-travel</div>
+      <p class="comp-desc"><strong>Aesthetic:</strong> Modern, millennial-friendly, clean gradients. <strong>Tone:</strong> Approachable, fun, conversational. <strong>Key lesson:</strong> Their Moxy Hotels partnership (astrology-based travel recommendations) is the closest any major brand has come to astrocartography. The travel x astrology overlap is validated but no one owns it yet.</p>
+      <div class="comp-tags">
+        <span class="comp-tag">Modern gradients</span>
+        <span class="comp-tag">Live consultations</span>
+        <span class="comp-tag">Travel partnership</span>
+        <span class="comp-tag">Approachable</span>
+      </div>
+    </div>
+  </div>
+
+  <h3>Existing Astrocartography Apps (Direct Competitors)</h3>
+  <p>This is the good news: <strong>the competition is weak.</strong> No one has nailed this yet.</p>
+
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th>App</th>
+        <th>Strength</th>
+        <th>Weakness</th>
+        <th>Rating</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Linea</td>
+        <td>First to market, daily geo-horoscopes</td>
+        <td>Buggy, poor reviews, support issues, generic UI</td>
+        <td>Mixed</td>
+      </tr>
+      <tr>
+        <td>Pathfinder</td>
+        <td>Paran lines, 3D globe, professional features</td>
+        <td>New, small userbase, developer-focused aesthetic</td>
+        <td>Positive</td>
+      </tr>
+      <tr>
+        <td>AskNova</td>
+        <td>AI chat, relocation comparisons, bookmarking</td>
+        <td>Web-first, less polished mobile UX</td>
+        <td>Growing</td>
+      </tr>
+      <tr>
+        <td>Astro.com</td>
+        <td>Industry standard, free, used by all TikTok creators</td>
+        <td>Ancient UI, not mobile-optimized, zero personality</td>
+        <td>De facto</td>
+      </tr>
+      <tr>
+        <td><strong>Your App</strong></td>
+        <td><strong>Beautiful UX, real map, sentiment analysis, live GPS insights</strong></td>
+        <td><strong>Needs brand identity to stand out</strong></td>
+        <td><strong>→ This doc</strong></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 02 NAMING -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="naming">
+  <div class="section-label">02 — Naming Strategy</div>
+  <h2>Finding the Perfect Name</h2>
+  <p>Your current name "Stellaris" has pros and cons. It sounds cosmic and premium, but it's also the name of a massive Paradox Interactive video game (350K+ reviews on Steam), which creates SEO and brand confusion. Let's evaluate options.</p>
+
+  <h3>Naming Criteria</h3>
+  <div class="card-grid three">
+    <div class="card">
+      <div class="card-title">🔍 SEO</div>
+      <div class="card-desc">Must be searchable. Avoid names claimed by games, companies, or astronomical terms with heavy Wikipedia presence.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">@ Handles</div>
+      <div class="card-desc">Available across Instagram, TikTok, X/Twitter, Threads. One word or unique compound. Must be the SAME everywhere.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🌐 Domain</div>
+      <div class="card-desc">.com or .app available and affordable. Avoid $10K+ premium domains. Consider .app as legitimate for mobile products.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">💬 Sayable</div>
+      <div class="card-desc">Easy to spell when heard. Easy to say when read. The "tell your friend about it" test. No confusion in pronunciation.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">✨ Evocative</div>
+      <div class="card-desc">Should feel cosmic, feminine, adventurous, and slightly mysterious. Should NOT feel clinical, corporate, or masculine.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🎯 Distinct</div>
+      <div class="card-desc">Doesn't overlap with Co-Star, CHANI, Sanctuary, Linea, The Pattern, AstroSage, or other established astrology brands.</div>
+    </div>
+  </div>
+
+  <h3>Name Recommendations</h3>
+
+  <div class="name-option recommended">
+    <div class="name-big">Lùmina</div>
+    <div class="name-phonetic">/loo-MEE-nah/</div>
+    <p class="name-rationale"><strong>Why it works:</strong> Derives from Latin "lumen" (light) — celestial but grounded. The accent mark adds visual distinction and femininity (like CHANI's collage aesthetic). Feels premium without being pretentious. Easy to say, easy to remember. Evokes illumination, guidance, discovery — perfect for an app that literally shows you where your light shines brightest on the map. Works beautifully as a standalone word; doesn't need "astro" or "star" in it.</p>
+    <div class="name-checks">
+      <span class="name-check good">✓ Unique — not a game/brand</span>
+      <span class="name-check good">✓ @lumina.app likely available</span>
+      <span class="name-check good">✓ lumina.app domain checkable</span>
+      <span class="name-check good">✓ Passes say-it-out-loud test</span>
+      <span class="name-check warn">⚡ Needs accent or suffix to avoid generic conflicts</span>
+    </div>
+  </div>
+
+  <div class="name-option">
+    <div class="name-big">Stellara</div>
+    <div class="name-phonetic">/steh-LAR-ah/</div>
+    <p class="name-rationale"><strong>Why it works:</strong> Evolves your current "Stellaris" with a softer, more feminine ending. "-ara" is more distinctive than "-aris" (which reads as a pharmaceutical). Sounds like "stellar" + an embrace. Still cosmic. The "a" ending gives it a name-like quality — like it's a character, not a product. More searchable than Stellaris (no video game conflict).</p>
+    <div class="name-checks">
+      <span class="name-check good">✓ Builds on existing name equity</span>
+      <span class="name-check good">✓ Distinct from Stellaris game</span>
+      <span class="name-check good">✓ Feminine, warm ending</span>
+      <span class="name-check warn">⚡ Check domain availability</span>
+    </div>
+  </div>
+
+  <div class="name-option">
+    <div class="name-big">Solivane</div>
+    <div class="name-phonetic">/SOL-ih-vane/</div>
+    <p class="name-rationale"><strong>Why it works:</strong> A coined word blending "sol" (sun) + "vane" (as in weather vane — direction, navigation). Sounds like an elegant French word. Completely unique, zero Google conflicts. Very brandable, very SEO-ownable. The "vane" element subtly nods to cartography and navigation without being literal. Downside: slightly harder to spell on first hearing.</p>
+    <div class="name-checks">
+      <span class="name-check good">✓ Completely unique coined word</span>
+      <span class="name-check good">✓ Zero SEO conflicts</span>
+      <span class="name-check good">✓ All handles likely available</span>
+      <span class="name-check warn">⚡ Spelling ambiguity (Solivane vs Solivaine)</span>
+    </div>
+  </div>
+
+  <div class="name-option">
+    <div class="name-big">Meridia</div>
+    <div class="name-phonetic">/meh-RID-ee-ah/</div>
+    <p class="name-rationale"><strong>Why it works:</strong> From "meridian" — the astronomical term for the line a celestial body crosses at its highest point (MC line in astrocartography). Deeply relevant to the actual subject matter. Sounds mythological, like a place or a goddess. Elegant, memorable, feminine. Astrology-educated users will immediately get the reference.</p>
+    <div class="name-checks">
+      <span class="name-check good">✓ Deep astro-cartography relevance</span>
+      <span class="name-check good">✓ Mythological feeling</span>
+      <span class="name-check warn">⚡ Meridia exists in Elder Scrolls lore</span>
+      <span class="name-check warn">⚡ Similar to Merida (Brave) — could be good or bad</span>
+    </div>
+  </div>
+
+  <div class="name-option">
+    <div class="name-big">Astraea</div>
+    <div class="name-phonetic">/as-TREE-ah/</div>
+    <p class="name-rationale"><strong>Why it works:</strong> Astraea was the Greek goddess of the stars who became the constellation Virgo. A real mythological name with celestial roots. Beautiful, feminine, ancient. The connection to an actual constellation gives it authentic astrological gravitas. Works as a character name — "Ask Astraea where you should go." </p>
+    <div class="name-checks">
+      <span class="name-check good">✓ Real mythology, authentic</span>
+      <span class="name-check good">✓ Beautiful, memorable</span>
+      <span class="name-check warn">⚡ Some existing uses (asteroid, academic refs)</span>
+      <span class="name-check warn">⚡ Spelling might trip people up</span>
+    </div>
+  </div>
+
+  <div class="name-option">
+    <div class="name-big">Stellaris <span style="color:var(--text3);font-size:20px">(keep it)</span></div>
+    <div class="name-phonetic">/steh-LAR-is/</div>
+    <p class="name-rationale"><strong>Assessment:</strong> It's not bad. It sounds premium, cosmic, and established. The problem is the Paradox Interactive video game dominates search results — when someone Googles "Stellaris app" they'll get the game. You'll be fighting for SEO forever. The "-is" ending also reads slightly clinical/pharmaceutical. If you love it, consider pairing it with a distinctive visual brand and consistent "@stellaris.app" handles.</p>
+    <div class="name-checks">
+      <span class="name-check good">✓ You already like it</span>
+      <span class="name-check good">✓ Sounds premium</span>
+      <span class="name-check bad">✗ Major SEO conflict (Paradox game)</span>
+      <span class="name-check bad">✗ Handles probably taken</span>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 03 VISUAL IDENTITY -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="identity">
+  <div class="section-label">03 — Visual Identity</div>
+  <h2>How It Should Look & Feel</h2>
+  <p>Based on what works in the market, your target demo (millennial/Gen Z women interested in spirituality & wellness), and what differentiates you from existing astrocartography tools, I recommend a direction I'm calling <strong>"Celestial Warmth"</strong> — bridging CHANI's emotional warmth with Co-Star's clean polish, plus the inherent adventure of maps & travel.</p>
+
+  <h3>Recommended Direction: Celestial Warmth</h3>
+  <p>Not stark minimalism (Co-Star already owns that). Not collage-zine (CHANI owns that). Instead: <strong>a warm, dark-mode experience that feels like looking at the night sky from a beautiful place.</strong> Clean and modern, but with depth, warmth, and a sense of wonder. Think: dark navy backgrounds, soft glowing accents, and a premium-feeling map experience.</p>
+
+  <h3>Color Palette Options</h3>
+
+  <p><strong>Option A — "Midnight Violet"</strong> (Recommended for dark-mode app)</p>
+  <div class="palette-row">
+    <div class="swatch" style="background:#0B1026"><span class="swatch-label">#0B1026</span></div>
+    <div class="swatch" style="background:#6C63FF"><span class="swatch-label">#6C63FF</span></div>
+    <div class="swatch" style="background:#A78BFA"><span class="swatch-label">#A78BFA</span></div>
+    <div class="swatch" style="background:#DDD6FE"><span class="swatch-label">#DDD6FE</span></div>
+    <div class="swatch" style="background:#F472B6"><span class="swatch-label">#F472B6</span></div>
+    <div class="swatch" style="background:#5EEAD4"><span class="swatch-label">#5EEAD4</span></div>
+    <div class="swatch" style="background:#FBBF24"><span class="swatch-label">#FBBF24</span></div>
+  </div>
+  <p style="font-size:13px;">Deep cosmic navy base. Violet/lavender primary (feminine, mystical, premium). Rose and teal accents for sentiment coding. Gold for special moments. This is close to your current app palette — a strong foundation to formalize.</p>
+
+  <p><strong>Option B — "Golden Hour"</strong> (warmer, travel-oriented)</p>
+  <div class="palette-row">
+    <div class="swatch" style="background:#0F0E17"><span class="swatch-label">#0F0E17</span></div>
+    <div class="swatch" style="background:#E8985E"><span class="swatch-label">#E8985E</span></div>
+    <div class="swatch" style="background:#FF8474"><span class="swatch-label">#FF8474</span></div>
+    <div class="swatch" style="background:#FFC6A5"><span class="swatch-label">#FFC6A5</span></div>
+    <div class="swatch" style="background:#7F5AF0"><span class="swatch-label">#7F5AF0</span></div>
+    <div class="swatch" style="background:#2CB67D"><span class="swatch-label">#2CB67D</span></div>
+    <div class="swatch" style="background:#FFFFFE"><span class="swatch-label">#FFFFFE</span></div>
+  </div>
+  <p style="font-size:13px;">Dark base with warm copper/peach/coral primary. Feels like sunset, travel, warmth. More adventurous, more "wanderlust." Would differentiate strongly from every competitor (no one uses warm tones). Riskier but more memorable.</p>
+
+  <h3>Typography</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-label">Display / Headlines</div>
+      <div class="card-title" style="font-family:'Instrument Serif',serif;font-size:28px;font-weight:400;">Instrument Serif</div>
+      <div class="card-desc">Or similar: Playfair Display, Fraunces, or Cormorant Garamond. A serif with personality — elegant but not stuffy. Italic variant for emphasis creates beautiful moments.</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Body / UI</div>
+      <div class="card-title" style="font-family:'DM Sans',sans-serif;font-weight:400;">Outfit (current)</div>
+      <div class="card-desc">Your current Outfit font family is excellent. Clean, modern, legible at small sizes, has good weight range. Keep it. Pair it with a serif display font for headlines/hero moments.</div>
+    </div>
+  </div>
+
+  <h3>Logo Direction</h3>
+  <p>Based on what works in the astrology app space:</p>
+  <div class="card-grid">
+    <div class="card accent-border">
+      <div class="card-label">Recommended</div>
+      <div class="card-title">Wordmark + Celestial Mark</div>
+      <div class="card-desc">A clean wordmark in your display serif, paired with a minimal celestial symbol — a stylized star/compass point, or a planet-line crossing. Think how CHANI uses just the word "CHANI" and Co-Star uses a minimal star. The symbol should work at 16x16 as an app icon.</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Avoid</div>
+      <div class="card-title">Overly Complex Illustrations</div>
+      <div class="card-desc">No detailed zodiac wheels, constellation drawings, or galaxy illustrations as logos. These don't scale, look dated fast, and scream "generic astrology app." The top brands all use extreme simplicity.</div>
+    </div>
+  </div>
+
+  <h3>App Icon Concept</h3>
+  <p>Your app icon is the single most important brand asset. It appears on millions of phone screens. Based on successful patterns:</p>
+  <div class="card-grid three">
+    <div class="card">
+      <div class="card-title">Option 1</div>
+      <div class="card-desc">A glowing line crossing a simplified globe/circle on deep navy. Like a Venus line illuminating the earth. Subtle, distinctive, whispers "maps + stars."</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Option 2</div>
+      <div class="card-desc">A single stylized compass rose with celestial geometry — four points representing MC/IC/ASC/DSC. Minimal, elegant, works at any size.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Option 3</div>
+      <div class="card-desc">Just the initial letter of your chosen name in an elegant serif, with a soft glow or planetary ring element. Like Co-Star's minimal approach.</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 04 TONE & MESSAGING -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="tone">
+  <div class="section-label">04 — Messaging & Tone</div>
+  <h2>How It Should Sound</h2>
+  <p>Your tone is your invisible brand. It's what makes someone screenshot a notification and share it. The successful astrology apps each have a <strong>distinct voice</strong> — here's yours.</p>
+
+  <h3>Brand Voice: "Wise Best Friend Who Travels"</h3>
+  <p>Not a cold algorithm (Co-Star). Not an academic astrologer (TimePassages). Not a therapist (The Pattern). Your voice is the <strong>friend who's lived in 5 countries and knows exactly where you should go next.</strong> Warm, knowing, adventurous, slightly poetic, never preachy. She's been there. She gets it.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-label">✓ Do sound like</div>
+      <div class="card-desc">Warm but not sappy. Knowing but not superior. Adventurous but not reckless. Mystical but not woo-woo. Specific but not prescriptive.</div>
+    </div>
+    <div class="card">
+      <div class="card-label">✗ Don't sound like</div>
+      <div class="card-desc">Corporate wellness app. Blunt/mean (Co-Star's schtick). Academic astrology textbook. Generic motivational quotes. New Age crystal shop copy.</div>
+    </div>
+  </div>
+
+  <h3>Sample Copy & Messaging</h3>
+
+  <div class="tone-example">
+    Your Venus line runs through Lisbon. No wonder you've been daydreaming about tile rooftops.
+    <span class="tone-label">Push Notification</span>
+  </div>
+
+  <div class="tone-example">
+    Some places just feel like you. That's not coincidence — it's astrocartography.
+    <span class="tone-label">App Store Tagline</span>
+  </div>
+
+  <div class="tone-example">
+    Paris isn't just romantic for everyone. Your Jupiter MC line says it's where you'd build an empire.
+    <span class="tone-label">Insight Card</span>
+  </div>
+
+  <div class="tone-example">
+    Your map. Your lines. Your next chapter. Discover where the stars say you'll thrive.
+    <span class="tone-label">Onboarding Hero</span>
+  </div>
+
+  <div class="tone-example">
+    Moved to a Saturn line and wondering why everything feels heavy? We need to talk about that.
+    <span class="tone-label">Learn Section Hook</span>
+  </div>
+
+  <div class="tone-example">
+    not every place is your place. that's the whole point. 🌍✨
+    <span class="tone-label">Tweet/Thread Style</span>
+  </div>
+
+  <h3>Tagline Candidates</h3>
+  <div class="card-grid">
+    <div class="card accent-border">
+      <div class="card-title">"Find your place in the stars"</div>
+      <div class="card-desc">Double meaning: your astrological place + your physical place on Earth. Simple, clear, memorable.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">"Where do you shine?"</div>
+      <div class="card-desc">Provocative question format. Implies self-discovery. Maps directly to the product.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">"Your stars. Your map."</div>
+      <div class="card-desc">Clean, minimal, perfectly describes the product. Feels ownable.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">"The world, through your chart"</div>
+      <div class="card-desc">Emphasizes personalization. Slight sophistication. Implies depth.</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 05 INFLUENCERS -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="influencers">
+  <div class="section-label">05 — Influencer Map</div>
+  <h2>Key Players in the Space</h2>
+  <p>Astrocartography is a <strong>small but rapidly growing niche.</strong> The hashtag #astrocartography has 10.8K+ posts on TikTok and is trending. Here are the people who matter:</p>
+
+  <h3>Astrocartography Specialists (Tier 1 — Must-Know)</h3>
+
+  <div class="influencer">
+    <div class="infl-row">
+      <div class="infl-avatar" style="background:linear-gradient(135deg,#F472B6,#A78BFA);">🌍</div>
+      <div>
+        <div class="infl-name">Helena Woods</div>
+        <div class="infl-handle">@mshelenawoods</div>
+      </div>
+    </div>
+    <div class="infl-stats">77K IG · #1 Astrocartography Podcast "Cosmic Compass" · Based in Paris</div>
+    <p class="infl-desc"><strong>THE astrocartography influencer.</strong> Digital nomad, author, runs certification courses. Consultations booked 3-4 months out. Tagline: "Change your location, change your life." Vibrant, colorful, flow-y dresses, travel-focused aesthetic. Has a directory of certified astrocartographers. A partnership or feature with Helena would be the single highest-impact move you could make. She's the Chani Nicholas of this niche.</p>
+  </div>
+
+  <div class="influencer">
+    <div class="infl-row">
+      <div class="infl-avatar" style="background:linear-gradient(135deg,#6366F1,#818CF8);">✦</div>
+      <div>
+        <div class="infl-name">NJ Kaiulani</div>
+        <div class="infl-handle">@njkastrology</div>
+      </div>
+    </div>
+    <div class="infl-stats">34K IG · Evolutionary Astrology + Astrocartography · Memphis, TN</div>
+    <p class="infl-desc">Respected professional astrologer who specializes in astrocartography readings. More serious/professional tone than Helena. Trusted by the astrology community for accuracy and depth. Good for credibility-building partnerships.</p>
+  </div>
+
+  <div class="influencer">
+    <div class="infl-row">
+      <div class="infl-avatar" style="background:linear-gradient(135deg,#EC4899,#F43F5E);">🔮</div>
+      <div>
+        <div class="infl-name">Cosmic Vibrations</div>
+        <div class="infl-handle">@cosmic_vibrations</div>
+      </div>
+    </div>
+    <div class="infl-stats">181.6K TikTok · Intuitive Astrocartography · Psychic/spiritual</div>
+    <p class="infl-desc">Largest TikTok presence in the astrocartography space. Combines astrocartography with psychic intuition and animal communication. More spiritual/woo-woo than Helena but has massive reach. Great for TikTok virality.</p>
+  </div>
+
+  <h3>Astrology Influencers Who've Covered Astrocartography</h3>
+  <p>These are broader astrology creators who've dipped into astrocartography content and could be approached:</p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">Chani Nicholas</div>
+      <div class="card-desc">CHANI app founder. Hasn't focused on astrocartography but her audience is the exact target demographic. Dream collab if CHANI ever considers location features.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Moxy Hotels × Sanctuary</div>
+      <div class="card-desc">This 2024 partnership proved brands see value in astro-travel. The concept: astrology-based travel recommendations. Your app literally does this better.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">TikTok Micro-Influencers</div>
+      <div class="card-desc">Dozens of 5K-50K creators making "where to move based on your chart" content using astro.com's clunky tool. They are WAITING for a better app to recommend.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Travel × Astrology Niche</div>
+      <div class="card-desc">Growing crossover of digital nomad + astrology creators. Vice covered this trend (Aug 2024). The audience exists — they just don't have a polished tool yet.</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 06 POSITIONING -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="positioning">
+  <div class="section-label">06 — Positioning</div>
+  <h2>Your Unique Position in the Market</h2>
+
+  <h3>The Gap You Fill</h3>
+  <p>Right now, people who want astrocartography have two options: <strong>astro.com</strong> (free but ugly, confusing, desktop-only) or <strong>expensive consultations</strong> ($150-300/session, booked months out). There's no beautiful, intuitive, mobile-first astrocartography experience. You're building the <strong>CHANI of astrocartography</strong> — the app that takes something complex and esoteric and makes it feel accessible, personal, and beautiful.</p>
+
+  <h3>Positioning Statement</h3>
+  <div class="tone-example" style="font-style:normal;font-size:16px;">
+    <strong>[Your App]</strong> is the first beautifully designed astrocartography app for everyday explorers — not just professional astrologers. We combine accurate planetary calculations with intuitive design, helping you discover where in the world your stars align for love, career, creativity, and personal growth.
+    <span class="tone-label">Internal Positioning Statement</span>
+  </div>
+
+  <h3>Key Differentiators</h3>
+  <div class="card-grid">
+    <div class="card accent-border">
+      <div class="card-title">🗺️ Real Interactive Map</div>
+      <div class="card-desc">Not a static image. A real map you can zoom, pan, and explore with your planetary lines rendered live. No other astrocartography app does this as well as you already do.</div>
+    </div>
+    <div class="card accent-border">
+      <div class="card-title">🎨 Sentiment Analysis</div>
+      <div class="card-desc">Your positive/difficult/neutral line classification is unique. No competitor has this. It immediately answers "is this line good or bad?" — the #1 beginner question.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">📍 Live GPS Insights</div>
+      <div class="card-desc">Press a button and see how your current location interacts with your chart in real time. No other app offers this "what's happening for me HERE" feature.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🏆 Great Places Discovery</div>
+      <div class="card-desc">Your ranked city recommendations with keyword filtering (love, career, home) is a killer feature. People want to be TOLD where to go. This does that.</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 07 SOCIAL MEDIA -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="social">
+  <div class="section-label">07 — Social Strategy</div>
+  <h2>Content That Goes Viral</h2>
+
+  <h3>Content Pillars</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-label">Pillar 1</div>
+      <div class="card-title">"Your Line In..."</div>
+      <div class="card-desc">Show a specific planetary line running through a beautiful city with a one-line hook. "Your Venus line runs through Barcelona. No wonder you've been dreaming of Spain." Carousel or reel format. Infinitely repeatable.</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Pillar 2</div>
+      <div class="card-title">City Showdowns</div>
+      <div class="card-desc">"Your best city for love vs your best city for career" — using the app's Great Places feature. Shareable, personal, drives downloads as people want to see THEIR results.</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Pillar 3</div>
+      <div class="card-title">Astrocartography 101</div>
+      <div class="card-desc">Educational content explaining lines, planets, and how to read a map. Fills a huge gap — most TikTok astrocartography content uses low-quality tools. Be the trusted source.</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Pillar 4</div>
+      <div class="card-title">Relocation Stories</div>
+      <div class="card-desc">User stories: "I moved to my Jupiter line and here's what happened." Social proof + emotional resonance. UGC goldmine once you have users.</div>
+    </div>
+  </div>
+
+  <h3>Platform Strategy</h3>
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th>Platform</th>
+        <th>Content Type</th>
+        <th>Priority</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>TikTok</td>
+        <td>Educational reels, "your line in X city" hooks, astrocartography basics, trending astrology sounds</td>
+        <td>🔴 Highest — this is where astrocartography is growing fastest</td>
+      </tr>
+      <tr>
+        <td>Instagram</td>
+        <td>Beautiful carousel posts, story polls ("which line would you move to?"), Reels repurposed from TikTok</td>
+        <td>🔴 High — core audience lives here</td>
+      </tr>
+      <tr>
+        <td>X / Twitter</td>
+        <td>Snappy astrological takes, planetary transit commentary, screenshot-worthy notifications</td>
+        <td>🟡 Medium — for thought leadership and virality</td>
+      </tr>
+      <tr>
+        <td>Pinterest</td>
+        <td>Astrocartography map infographics, "best cities for X sign" pins, mood boards</td>
+        <td>🟡 Medium — sleeper hit for organic search traffic</td>
+      </tr>
+      <tr>
+        <td>YouTube</td>
+        <td>Long-form tutorials on reading astrocartography, city deep-dives, collab with Helena Woods</td>
+        <td>🟢 Future — once you have audience, great for SEO and depth</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- 08 LAUNCH PLAYBOOK -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section" id="launch">
+  <div class="section-label">08 — Launch Playbook</div>
+  <h2>Making the Entrance</h2>
+
+  <h3>Pre-Launch (2-4 weeks before)</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">1. Lock the Name & Domain</div>
+      <div class="card-desc">Secure domain, all social handles, and App Store developer name. Register them ALL the same day to prevent squatting.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">2. Teaser Content</div>
+      <div class="card-desc">Start posting educational astrocartography content from the brand account. Build audience before the app even launches. "Something is coming" is overplayed — provide value immediately.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">3. Beta With Creators</div>
+      <div class="card-desc">Send beta access to 10-20 astrology micro-influencers (5K-50K followers). Let them play with their own map. Ask for honest reactions, not scripted promos.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">4. Helena Woods Outreach</div>
+      <div class="card-desc">Reach out to Helena personally. Offer her a featured astrocartographer role, or a "Helena's Picks" section. She's the gateway to the entire astrocartography community.</div>
+    </div>
+  </div>
+
+  <h3>Launch Week</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">5. "Your Map" Campaign</div>
+      <div class="card-desc">Invite users to share screenshots of their astrocartography map. Make the map visually beautiful enough that people WANT to share it. This is your viral loop.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">6. ProductHunt / Hacker News</div>
+      <div class="card-desc">Launch on Product Hunt for tech-curious early adopters. Position as "the Figma of astrocartography" — beautiful design meets complex data.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">7. Reddit r/astrology</div>
+      <div class="card-desc">Genuine participation (not spam). Answer astrocartography questions. Share the app when relevant. This community is hungry for good astrocartography tools.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">8. App Store Optimization</div>
+      <div class="card-desc">Keywords: "astrocartography," "astro map," "birth chart map," "travel astrology," "relocation astrology." Beautiful screenshots showing the actual map experience.</div>
+    </div>
+  </div>
+
+  <h3>Post-Launch Growth</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">Social Cause Integration</div>
+      <div class="card-desc">CHANI donates 5% to FreeFrom. Consider: donating a percentage to a travel/displacement cause. Values-driven branding creates loyalty with your demographic.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Community Building</div>
+      <div class="card-desc">Build around relocation stories and digital nomad lifestyle. Discord or community tab. Let users share their experiences on their planetary lines.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Professional Tier</div>
+      <div class="card-desc">Add paran lines and advanced features. Become the tool professional astrocartographers recommend to clients. Helena Woods' certification graduates need tools.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Travel Brand Partnerships</div>
+      <div class="card-desc">Pitch Airbnb, Moxy Hotels, travel brands on "astrology travel guides." Sanctuary already proved this works. You have the better product for it.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <h3 style="text-align:center;font-size:28px;margin-top:48px;margin-bottom:16px;">Key Takeaways</h3>
+  <div class="card-grid">
+    <div class="card accent-border">
+      <div class="card-title">You already have the product.</div>
+      <div class="card-desc">Your app's features (interactive map, sentiment analysis, live GPS, Great Places) are genuinely better than any existing astrocartography app. The brand needs to match the product quality.</div>
+    </div>
+    <div class="card accent-border">
+      <div class="card-title">Own the niche before it explodes.</div>
+      <div class="card-desc">Astrocartography is trending but no one owns it yet. Co-Star, CHANI, and The Pattern haven't touched location astrology. You have a 12-18 month window to become THE astrocartography app.</div>
+    </div>
+  </div>
+
+</div>
+
+</div><!-- end page -->
+</body>
+</html>

@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Astrocartography App — Naming, Taglines & Logo Concepts</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080F;
+  --surface: #0E0E18;
+  --surface2: #151522;
+  --surface3: #1C1C2E;
+  --border: #252538;
+  --border2: #2F2F48;
+  --text: #E8E4F0;
+  --text2: #9B95AA;
+  --text3: #5E586E;
+  --accent: #A78BFA;
+  --accent2: #7C3AED;
+  --accent3: #6C63FF;
+  --warm: #F59E8B;
+  --teal: #5EEAD4;
+  --gold: #FBBF24;
+  --rose: #F472B6;
+  --blue: #60A5FA;
+  --deep: #0B1026;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  font-size: 15px;
+  overflow-x: hidden;
+}
+
+.page { max-width: 960px; margin: 0 auto; padding: 0 36px 140px; }
+
+/* ─── Hero ─── */
+.hero {
+  padding: 80px 0 48px;
+  text-align: center;
+  position: relative;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(ellipse at center, rgba(167,139,250,0.07) 0%, rgba(108,99,255,0.03) 40%, transparent 70%);
+  pointer-events: none;
+}
+.hero-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 20px;
+  opacity: 0;
+  animation: fadeUp 0.6s ease forwards 0.2s;
+}
+.hero h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(40px, 5.5vw, 64px);
+  font-weight: 300;
+  line-height: 1.15;
+  color: var(--text);
+  margin-bottom: 18px;
+  opacity: 0;
+  animation: fadeUp 0.6s ease forwards 0.4s;
+}
+.hero h1 em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--accent);
+}
+.hero-sub {
+  font-size: 16px;
+  color: var(--text2);
+  max-width: 540px;
+  margin: 0 auto;
+  opacity: 0;
+  animation: fadeUp 0.6s ease forwards 0.6s;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Section ─── */
+.section { margin-top: 80px; }
+.section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.section h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 300;
+  line-height: 1.2;
+  margin-bottom: 16px;
+}
+.section h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px;
+  font-weight: 400;
+  margin: 40px 0 14px;
+  color: var(--text);
+}
+p { color: var(--text2); margin-bottom: 16px; }
+strong { color: var(--text); font-weight: 600; }
+
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border2), transparent);
+  margin: 64px 0;
+}
+
+/* ─── Name Cards ─── */
+.name-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 36px;
+  margin: 20px 0;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s ease;
+}
+.name-card:hover { border-color: var(--border2); }
+.name-card.top-pick {
+  border-color: rgba(167,139,250,0.35);
+  background: linear-gradient(160deg, rgba(108,99,255,0.06) 0%, var(--surface) 50%);
+}
+.name-card.top-pick::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle at top right, rgba(167,139,250,0.08), transparent 70%);
+  pointer-events: none;
+}
+.pick-badge {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(167,139,250,0.12);
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(167,139,250,0.2);
+}
+.name-display {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 44px;
+  font-weight: 300;
+  color: var(--text);
+  margin-bottom: 2px;
+  letter-spacing: 1px;
+}
+.name-phonetic {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 14px;
+}
+.name-meaning {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.name-rationale {
+  font-size: 14px;
+  color: var(--text2);
+  line-height: 1.75;
+  margin-bottom: 16px;
+}
+.name-taglines {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.tagline-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+.tagline {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text);
+  padding: 6px 0;
+  opacity: 0.85;
+}
+.tagline + .tagline { border-top: 1px solid rgba(255,255,255,0.03); }
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.check {
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.check.good { background: rgba(94,234,212,0.08); color: var(--teal); border: 1px solid rgba(94,234,212,0.15); }
+.check.warn { background: rgba(251,191,36,0.08); color: var(--gold); border: 1px solid rgba(251,191,36,0.15); }
+.check.bad { background: rgba(244,114,182,0.08); color: var(--rose); border: 1px solid rgba(244,114,182,0.15); }
+
+/* ─── Logo Section ─── */
+.logo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin: 24px 0;
+}
+.logo-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+  transition: border-color 0.3s ease;
+}
+.logo-card:hover { border-color: var(--border2); }
+.logo-card.featured {
+  grid-column: 1 / -1;
+  border-color: rgba(167,139,250,0.3);
+}
+.logo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+  position: relative;
+  overflow: hidden;
+}
+.logo-preview.dark-bg {
+  background: var(--deep);
+}
+.logo-preview.gradient-bg {
+  background: linear-gradient(160deg, #0B1026 0%, #12102E 50%, #0B1026 100%);
+}
+.logo-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(167,139,250,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+.logo-info {
+  padding: 20px 24px;
+  border-top: 1px solid var(--border);
+}
+.logo-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.logo-desc {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ─── App Icon Grid ─── */
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.icon-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  transition: border-color 0.3s;
+}
+.icon-card:hover { border-color: var(--border2); }
+.icon-preview {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 14px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.icon-label {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+/* ─── Tagline Showcase ─── */
+.tagline-showcase {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px;
+  margin: 20px 0;
+}
+.tagline-showcase-item {
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.tagline-showcase-item:last-child { border-bottom: none; }
+.tagline-text {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 24px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.tagline-context {
+  font-size: 12px;
+  color: var(--text3);
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 700px) {
+  .page { padding: 0 20px 80px; }
+  .logo-grid { grid-template-columns: 1fr; }
+  .logo-card.featured { grid-column: auto; }
+  .name-display { font-size: 32px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-label">Naming · Taglines · Logo Concepts</div>
+  <h1>Names That Say<br><em>"Stars Meet Maps"</em></h1>
+  <p class="hero-sub">Strong candidates with astro/star roots, paired taglines, and logo concepts built on the Midnight Violet identity system.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- NAMING -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-label">01 — Name Candidates</div>
+  <h2>The Shortlist</h2>
+  <p>Every name here has a clear star/astro connection so users instantly get the category. Prioritizing short, feminine-leaning, brandable words that don't collide with existing products.</p>
+
+  <!-- VELA -->
+  <div class="name-card top-pick">
+    <div class="pick-badge">★ Strong Pick</div>
+    <div class="name-display">Vela</div>
+    <div class="name-phonetic">/VEE-lah/</div>
+    <div class="name-meaning">◆ Latin: "sails" — the constellation of the great ship Argo Navis</div>
+    <p class="name-rationale"><strong>Why it hits:</strong> A real constellation name, but one almost nobody uses in branding. Four letters, two syllables, instantly memorable. The "sails" meaning is poetic — you're navigating by the stars, sailing toward the right place. Feels feminine and adventurous without being precious. It has that Co-Star quality of being a real word used in a surprising context. Incredibly easy to say, spell, and search for.</p>
+    <div class="name-taglines">
+      <div class="tagline-label">Paired Taglines</div>
+      <div class="tagline">"Navigate by starlight."</div>
+      <div class="tagline">"Your stars. Your map. Your move."</div>
+      <div class="tagline">"Set sail by the stars."</div>
+    </div>
+    <div class="checks">
+      <span class="check good">✓ Real constellation — authentic</span>
+      <span class="check good">✓ 4 letters, dead simple</span>
+      <span class="check good">✓ @vela.app likely available</span>
+      <span class="check good">✓ Sails = journey = perfect metaphor</span>
+      <span class="check warn">⚡ Check domain — vela.app or getvela.com</span>
+    </div>
+  </div>
+
+  <!-- PARAN -->
+  <div class="name-card top-pick">
+    <div class="pick-badge">★ Strong Pick</div>
+    <div class="name-display">Paran</div>
+    <div class="name-phonetic">/PAIR-an/</div>
+    <div class="name-meaning">◆ From "paran lines" — advanced astrocartography planetary crossing points</div>
+    <p class="name-rationale"><strong>Why it hits:</strong> This is an insider term that signals deep expertise. Paran lines are where two planetary influences cross on a map — the most powerful spots in astrocartography. Astrology-educated users will immediately respect the name. For newcomers, it sounds cool, short, and mysterious. Five letters. Completely unique in the app space. It's the technical term turned brand — like how Figma is a term from sculpture, or how Notion is a simple concept word elevated. Helena Woods and NJ Kaiulani would love that you named it after a real astrocartography concept.</p>
+    <div class="name-taglines">
+      <div class="tagline-label">Paired Taglines</div>
+      <div class="tagline">"Where your stars cross."</div>
+      <div class="tagline">"Find where you converge."</div>
+      <div class="tagline">"Every place on your map means something."</div>
+    </div>
+    <div class="checks">
+      <span class="check good">✓ Deep astrocartography credibility</span>
+      <span class="check good">✓ Zero brand conflicts</span>
+      <span class="check good">✓ 5 letters, easy to say/spell</span>
+      <span class="check good">✓ Insider term → instant respect</span>
+      <span class="check warn">⚡ Less intuitive for total newcomers</span>
+    </div>
+  </div>
+
+  <!-- ELARA -->
+  <div class="name-card">
+    <div class="name-display">Elara</div>
+    <div class="name-phonetic">/eh-LAR-ah/</div>
+    <div class="name-meaning">◆ One of Jupiter's moons — also a Greek mythological figure loved by Zeus</div>
+    <p class="name-rationale"><strong>Why it hits:</strong> Jupiter in astrocartography represents growth, luck, and expansion — exactly what people hope to find when they move to a new city. Naming the app after a Jupiter moon subtly channels that energy. Elara sounds elegant, mythological, and name-like — "Ask Elara where to move." Beautiful feminine ending. The Greek mythology root gives it depth without being obvious. Five letters, three syllables, flows beautifully.</p>
+    <div class="name-taglines">
+      <div class="tagline-label">Paired Taglines</div>
+      <div class="tagline">"Discover where you expand."</div>
+      <div class="tagline">"Your map is written in the stars."</div>
+      <div class="tagline">"Go where you grow."</div>
+    </div>
+    <div class="checks">
+      <span class="check good">✓ Jupiter = growth (perfect theme)</span>
+      <span class="check good">✓ Elegant, mythological</span>
+      <span class="check good">✓ Feminine, name-like quality</span>
+      <span class="check warn">⚡ Some minor uses (Elara Technologies)</span>
+      <span class="check warn">⚡ Sounds similar to Alara, Elora</span>
+    </div>
+  </div>
+
+  <!-- ASTRA -->
+  <div class="name-card top-pick">
+    <div class="pick-badge">★ Strong Pick</div>
+    <div class="name-display">Astra</div>
+    <div class="name-phonetic">/AS-trah/</div>
+    <div class="name-meaning">◆ Latin: "stars" — as in per aspera ad astra, "through hardship to the stars"</div>
+    <p class="name-rationale"><strong>Why it hits:</strong> The most direct star-connection possible. Five letters, two syllables, instantly says "this is about stars." Feminine, strong, and universally understood. "Per aspera ad astra" is tattooed on half of TikTok — the cultural resonance is already there. It works as a character name ("What does Astra say about Tokyo?") and as a brand. It's the kind of name where someone hears it once and never forgets it. The challenge is that Astra has some existing uses (the rocket company went through bankruptcy, AstraZeneca is in pharma), but in the astrology app space specifically, it's wide open.</p>
+    <div class="name-taglines">
+      <div class="tagline-label">Paired Taglines</div>
+      <div class="tagline">"Through the stars, to your place."</div>
+      <div class="tagline">"Your stars know where you belong."</div>
+      <div class="tagline">"Find your place in the stars."</div>
+    </div>
+    <div class="checks">
+      <span class="check good">✓ Most direct star connection</span>
+      <span class="check good">✓ Cultural resonance (per aspera ad astra)</span>
+      <span class="check good">✓ Instantly understood</span>
+      <span class="check warn">⚡ Astra rocket company (bankrupt, fading)</span>
+      <span class="check warn">⚡ Domain will need creative TLD</span>
+    </div>
+  </div>
+
+  <!-- SIDRA -->
+  <div class="name-card">
+    <div class="name-display">Sidra</div>
+    <div class="name-phonetic">/SID-rah/</div>
+    <div class="name-meaning">◆ From Latin "sideralis" (of the stars) — root of "sidereal" time in astrology</div>
+    <p class="name-rationale"><strong>Why it hits:</strong> Sidereal time is what all astrological calculations are based on — it's the clock of the stars. "Sidra" extracts that root into a short, punchy, beautiful name. Sounds like a person's name (approachable) but has deep celestial etymology. Nobody is using this. Completely ownable. It avoids the "astro-" prefix that makes names feel literal, while still rooting in star-language. Five letters, clean, modern, works globally.</p>
+    <div class="name-taglines">
+      <div class="tagline-label">Paired Taglines</div>
+      <div class="tagline">"Aligned by the stars."</div>
+      <div class="tagline">"Not every city is your city."</div>
+      <div class="tagline">"Your star map, decoded."</div>
+    </div>
+    <div class="checks">
+      <span class="check good">✓ Deep astro etymology</span>
+      <span class="check good">✓ Completely unique — zero conflicts</span>
+      <span class="check good">✓ 5 letters, globally pronounceable</span>
+      <span class="check warn">⚡ Star connection not obvious to casual users</span>
+    </div>
+  </div>
+
+  <!-- ASTRID -->
+  <div class="name-card">
+    <div class="name-display">Astrid</div>
+    <div class="name-phonetic">/AS-trid/</div>
+    <div class="name-meaning">◆ Old Norse: "divinely beautiful" — also echoes "astra" (stars)</div>
+    <p class="name-rationale"><strong>Why it hits:</strong> A real name that starts with "Astr-" — immediately reads as star-related. Feels like a character, a guide ("Astrid says you'd thrive in Barcelona"). The Norse origin adds a sense of strength and adventure — think Nordic explorer energy. Less common in branding than you'd expect. It has the approachability of a name you've heard before but the star-connection makes it purposeful. Six letters, very easy to spell and pronounce.</p>
+    <div class="name-taglines">
+      <div class="tagline-label">Paired Taglines</div>
+      <div class="tagline">"She knows where you shine."</div>
+      <div class="tagline">"Your celestial compass."</div>
+      <div class="tagline">"Star-guided, map-ready."</div>
+    </div>
+    <div class="checks">
+      <span class="check good">✓ Astr- prefix = instant star read</span>
+      <span class="check good">✓ Character-like, approachable</span>
+      <span class="check good">✓ Easy to spell and say</span>
+      <span class="check warn">⚡ It's a human name — some overlap</span>
+      <span class="check warn">⚡ How to Train Your Dragon character</span>
+    </div>
+  </div>
+
+  <!-- SOLARA -->
+  <div class="name-card">
+    <div class="name-display">Solara</div>
+    <div class="name-phonetic">/soh-LAR-ah/</div>
+    <div class="name-meaning">◆ From Latin "sol" (sun) + "-ara" feminine ending — "of the sun"</div>
+    <p class="name-rationale"><strong>Why it hits:</strong> The Sun is the most important body in a natal chart and in astrocartography — your Sun lines represent where you feel most "you." Solara captures that solar energy with a warm, feminine sound. It has a travel vibe — sounds like a beautiful Mediterranean town. The "-ara" ending matches the Stellara approach from the previous round but without the video game conflict. Six letters, three syllables, rolls off the tongue.</p>
+    <div class="name-taglines">
+      <div class="tagline-label">Paired Taglines</div>
+      <div class="tagline">"Find where you shine."</div>
+      <div class="tagline">"Bright places for bright people."</div>
+      <div class="tagline">"Your light, mapped."</div>
+    </div>
+    <div class="checks">
+      <span class="check good">✓ Sun = core identity in astrology</span>
+      <span class="check good">✓ Warm, travel-feeling</span>
+      <span class="check good">✓ Feminine, elegant flow</span>
+      <span class="check warn">⚡ Solara has some energy company uses</span>
+      <span class="check warn">⚡ More sun than star — may feel less astro</span>
+    </div>
+  </div>
+
+  <!-- STELLAVIE -->
+  <div class="name-card">
+    <div class="name-display">Stellavie</div>
+    <div class="name-phonetic">/STELL-ah-vee/</div>
+    <div class="name-meaning">◆ "Stella" (star) + "vie" (French: life/way) — "the star's path"</div>
+    <p class="name-rationale"><strong>Why it hits:</strong> If you want to keep the "stella/star" energy from Stellaris but make it completely your own. Stellavie sounds like a French luxury brand — premium, feminine, sophisticated. "The way of the stars" is literally what astrocartography is. Three syllables, distinctive, would own search results completely. The French touch gives it the same elevated feeling that made "Atelier" and "Maison" fixtures in premium branding.</p>
+    <div class="name-taglines">
+      <div class="tagline-label">Paired Taglines</div>
+      <div class="tagline">"Follow the star's path."</div>
+      <div class="tagline">"Your stars. Your way."</div>
+      <div class="tagline">"Life, directed by the stars."</div>
+    </div>
+    <div class="checks">
+      <span class="check good">✓ Keeps stella/star root</span>
+      <span class="check good">✓ Zero conflicts — completely coined</span>
+      <span class="check good">✓ Sounds premium/French luxury</span>
+      <span class="check warn">⚡ 3 syllables — slightly longer</span>
+      <span class="check warn">⚡ Spelling from hearing is tricky</span>
+    </div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- UNIVERSAL TAGLINES -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-label">02 — Taglines</div>
+  <h2>Lines That Work With Any Name</h2>
+  <p>These are name-agnostic — they work regardless of what you pick.</p>
+
+  <div class="tagline-showcase">
+    <div class="tagline-showcase-item">
+      <div class="tagline-text">"Your map is written in the stars."</div>
+      <div class="tagline-context">Hero / App Store — already proven in pitch deck, emotionally strong</div>
+    </div>
+    <div class="tagline-showcase-item">
+      <div class="tagline-text">"Not every city is your city."</div>
+      <div class="tagline-context">Social / TikTok — provocative, shareable, drives curiosity</div>
+    </div>
+    <div class="tagline-showcase-item">
+      <div class="tagline-text">"Find where you shine."</div>
+      <div class="tagline-context">App Store subtitle — short, action-oriented, double meaning</div>
+    </div>
+    <div class="tagline-showcase-item">
+      <div class="tagline-text">"Where do the stars say you belong?"</div>
+      <div class="tagline-context">Ad copy / onboarding — question format drives engagement</div>
+    </div>
+    <div class="tagline-showcase-item">
+      <div class="tagline-text">"Some places just feel like you."</div>
+      <div class="tagline-context">Emotional hook — relatable, warm, non-astro-jargon-y</div>
+    </div>
+    <div class="tagline-showcase-item">
+      <div class="tagline-text">"Move with the stars."</div>
+      <div class="tagline-context">Three words. Double meaning: physical movement + being emotionally moved</div>
+    </div>
+    <div class="tagline-showcase-item">
+      <div class="tagline-text">"Your chart. The world. Go."</div>
+      <div class="tagline-context">Ultra-minimal — works for app icon splash screens, ads</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- LOGO CONCEPTS -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-label">03 — Logo Concepts</div>
+  <h2>Visual Identity Directions</h2>
+  <p>All built on the <strong>Midnight Violet</strong> palette from the branding plan. Showing concepts for the top three names — each with a wordmark + symbol approach.</p>
+
+  <h3>Vela — Constellation Sail</h3>
+  <div class="logo-grid">
+    <div class="logo-card featured">
+      <div class="logo-preview gradient-bg" style="padding:56px 40px;">
+        <svg width="340" height="90" viewBox="0 0 340 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Sail/constellation mark -->
+          <g transform="translate(0, 8)">
+            <!-- Triangle sail shape with star points -->
+            <path d="M 35 8 L 55 68 L 10 58 Z" stroke="#A78BFA" stroke-width="1.2" fill="none" opacity="0.6"/>
+            <!-- Stars at vertices -->
+            <circle cx="35" cy="8" r="3" fill="#A78BFA"/>
+            <circle cx="55" cy="68" r="2.5" fill="#6C63FF"/>
+            <circle cx="10" cy="58" r="2" fill="#A78BFA" opacity="0.7"/>
+            <!-- Inner star -->
+            <circle cx="33" cy="42" r="1.8" fill="#DDD6FE" opacity="0.5"/>
+            <!-- Connecting line - navigation feel -->
+            <line x1="35" y1="8" x2="33" y2="42" stroke="#A78BFA" stroke-width="0.6" opacity="0.4"/>
+            <!-- Subtle glow -->
+            <circle cx="35" cy="8" r="8" fill="#A78BFA" opacity="0.08"/>
+          </g>
+          <!-- Wordmark -->
+          <text x="80" y="58" font-family="Cormorant Garamond, serif" font-size="54" font-weight="300" fill="#E8E4F0" letter-spacing="6">Vela</text>
+          <!-- Subtle tagline -->
+          <text x="82" y="78" font-family="DM Sans, sans-serif" font-size="10" fill="#5E586E" letter-spacing="3">NAVIGATE BY STARLIGHT</text>
+        </svg>
+      </div>
+      <div class="logo-info">
+        <div class="logo-name">Primary Wordmark + Constellation Mark</div>
+        <p class="logo-desc">Minimal constellation-sail symbol connecting three stars in the Vela constellation shape. The triangle suggests a sail, journey, direction. Pairs with a light-weight serif wordmark.</p>
+      </div>
+    </div>
+    <div class="logo-card">
+      <div class="logo-preview dark-bg">
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- App icon version - rounded square implied -->
+          <rect x="2" y="2" width="76" height="76" rx="18" fill="#0B1026" stroke="#252538" stroke-width="1"/>
+          <!-- Sail constellation -->
+          <path d="M 40 18 L 56 60 L 22 52 Z" stroke="#A78BFA" stroke-width="1.5" fill="rgba(167,139,250,0.06)"/>
+          <circle cx="40" cy="18" r="3.5" fill="#A78BFA"/>
+          <circle cx="56" cy="60" r="3" fill="#6C63FF"/>
+          <circle cx="22" cy="52" r="2.5" fill="#A78BFA" opacity="0.7"/>
+          <circle cx="39" cy="42" r="2" fill="#DDD6FE" opacity="0.5"/>
+          <!-- Glow -->
+          <circle cx="40" cy="18" r="10" fill="#A78BFA" opacity="0.1"/>
+        </svg>
+      </div>
+      <div class="logo-info">
+        <div class="logo-name">App Icon</div>
+        <p class="logo-desc">Constellation sail on deep navy. Works at 16×16 and 1024×1024. The glowing top star is the focal point.</p>
+      </div>
+    </div>
+    <div class="logo-card">
+      <div class="logo-preview dark-bg">
+        <svg width="200" height="60" viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Compact horizontal lockup -->
+          <g transform="translate(0, 6)">
+            <path d="M 22 5 L 34 42 L 8 36 Z" stroke="#A78BFA" stroke-width="1" fill="none" opacity="0.5"/>
+            <circle cx="22" cy="5" r="2.5" fill="#A78BFA"/>
+            <circle cx="34" cy="42" r="2" fill="#6C63FF"/>
+            <circle cx="8" cy="36" r="1.8" fill="#A78BFA" opacity="0.6"/>
+          </g>
+          <text x="52" y="38" font-family="Cormorant Garamond, serif" font-size="34" font-weight="300" fill="#E8E4F0" letter-spacing="4">Vela</text>
+        </svg>
+      </div>
+      <div class="logo-info">
+        <div class="logo-name">Compact Lockup</div>
+        <p class="logo-desc">Horizontal version for headers, social bios, and navigation bars.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Paran — Crossing Lines</h3>
+  <div class="logo-grid">
+    <div class="logo-card featured">
+      <div class="logo-preview gradient-bg" style="padding:56px 40px;">
+        <svg width="360" height="90" viewBox="0 0 360 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Crossing lines mark -->
+          <g transform="translate(5, 10)">
+            <!-- Two crossing arcs representing planetary lines on a map -->
+            <path d="M 5 60 Q 30 10, 55 35" stroke="#A78BFA" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            <path d="M 10 15 Q 35 55, 60 25" stroke="#6C63FF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            <!-- Intersection point - the paran -->
+            <circle cx="32" cy="33" r="4" fill="#A78BFA" opacity="0.9"/>
+            <circle cx="32" cy="33" r="10" fill="#A78BFA" opacity="0.06"/>
+            <circle cx="32" cy="33" r="18" fill="#A78BFA" opacity="0.03"/>
+            <!-- Small stars along lines -->
+            <circle cx="15" cy="25" r="1.5" fill="#DDD6FE" opacity="0.4"/>
+            <circle cx="48" cy="38" r="1.5" fill="#DDD6FE" opacity="0.4"/>
+          </g>
+          <!-- Wordmark -->
+          <text x="85" y="58" font-family="Cormorant Garamond, serif" font-size="54" font-weight="300" fill="#E8E4F0" letter-spacing="8">Paran</text>
+          <text x="87" y="78" font-family="DM Sans, sans-serif" font-size="10" fill="#5E586E" letter-spacing="3">WHERE YOUR STARS CROSS</text>
+        </svg>
+      </div>
+      <div class="logo-info">
+        <div class="logo-name">Primary Wordmark + Crossing Lines Mark</div>
+        <p class="logo-desc">Two planetary lines crossing at a glowing paran point — the exact astrological concept the name comes from. The radiating circles suggest energy at the intersection. Scientific precision meets celestial beauty.</p>
+      </div>
+    </div>
+    <div class="logo-card">
+      <div class="logo-preview dark-bg">
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="2" width="76" height="76" rx="18" fill="#0B1026" stroke="#252538" stroke-width="1"/>
+          <!-- Crossing arcs -->
+          <path d="M 18 58 Q 40 14, 62 38" stroke="#A78BFA" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M 20 20 Q 42 60, 64 30" stroke="#6C63FF" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <!-- Paran point -->
+          <circle cx="40" cy="37" r="5" fill="#A78BFA"/>
+          <circle cx="40" cy="37" r="12" fill="#A78BFA" opacity="0.08"/>
+        </svg>
+      </div>
+      <div class="logo-info">
+        <div class="logo-name">App Icon</div>
+        <p class="logo-desc">Two lines crossing with a glowing intersection. Feels like looking at a map — exactly right for astrocartography.</p>
+      </div>
+    </div>
+    <div class="logo-card">
+      <div class="logo-preview dark-bg">
+        <svg width="200" height="60" viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(2, 8)">
+            <path d="M 3 38 Q 20 6, 37 22" stroke="#A78BFA" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            <path d="M 6 10 Q 22 38, 40 16" stroke="#6C63FF" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            <circle cx="21" cy="21" r="3.5" fill="#A78BFA"/>
+          </g>
+          <text x="52" y="38" font-family="Cormorant Garamond, serif" font-size="34" font-weight="300" fill="#E8E4F0" letter-spacing="5">Paran</text>
+        </svg>
+      </div>
+      <div class="logo-info">
+        <div class="logo-name">Compact Lockup</div>
+        <p class="logo-desc">The crossing-lines mark scales down beautifully — still readable at small sizes.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Astra — Star Compass</h3>
+  <div class="logo-grid">
+    <div class="logo-card featured">
+      <div class="logo-preview gradient-bg" style="padding:56px 40px;">
+        <svg width="360" height="90" viewBox="0 0 360 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Star compass mark -->
+          <g transform="translate(8, 10)">
+            <!-- Compass circle -->
+            <circle cx="32" cy="35" r="24" stroke="#A78BFA" stroke-width="0.8" fill="none" opacity="0.3"/>
+            <!-- Four-point star / compass -->
+            <path d="M 32 8 L 36 30 L 56 35 L 36 40 L 32 62 L 28 40 L 8 35 L 28 30 Z" fill="#A78BFA" opacity="0.15" stroke="#A78BFA" stroke-width="1"/>
+            <!-- Center star -->
+            <circle cx="32" cy="35" r="3" fill="#DDD6FE"/>
+            <circle cx="32" cy="35" r="8" fill="#A78BFA" opacity="0.06"/>
+            <!-- Cardinal dots -->
+            <circle cx="32" cy="8" r="1.5" fill="#A78BFA"/>
+            <circle cx="56" cy="35" r="1.5" fill="#6C63FF"/>
+            <circle cx="32" cy="62" r="1.5" fill="#A78BFA" opacity="0.6"/>
+            <circle cx="8" cy="35" r="1.5" fill="#6C63FF" opacity="0.6"/>
+          </g>
+          <!-- Wordmark -->
+          <text x="80" y="58" font-family="Cormorant Garamond, serif" font-size="54" font-weight="300" fill="#E8E4F0" letter-spacing="7">Astra</text>
+          <text x="82" y="78" font-family="DM Sans, sans-serif" font-size="10" fill="#5E586E" letter-spacing="3">FIND YOUR PLACE IN THE STARS</text>
+        </svg>
+      </div>
+      <div class="logo-info">
+        <div class="logo-name">Primary Wordmark + Star Compass Mark</div>
+        <p class="logo-desc">A four-point star that doubles as a compass rose — stars meet navigation in one symbol. The four points map to the four astrocartography angles: MC, IC, ASC, DSC. Elegant, minimal, deeply meaningful. The center glow represents "you" at the center of your map.</p>
+      </div>
+    </div>
+    <div class="logo-card">
+      <div class="logo-preview dark-bg">
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="2" width="76" height="76" rx="18" fill="#0B1026" stroke="#252538" stroke-width="1"/>
+          <circle cx="40" cy="40" r="22" stroke="#A78BFA" stroke-width="0.8" fill="none" opacity="0.25"/>
+          <path d="M 40 14 L 44 35 L 62 40 L 44 45 L 40 66 L 36 45 L 18 40 L 36 35 Z" fill="#A78BFA" opacity="0.15" stroke="#A78BFA" stroke-width="1.2"/>
+          <circle cx="40" cy="40" r="4" fill="#DDD6FE"/>
+          <circle cx="40" cy="40" r="10" fill="#A78BFA" opacity="0.06"/>
+          <circle cx="40" cy="14" r="2" fill="#A78BFA"/>
+          <circle cx="62" cy="40" r="2" fill="#6C63FF"/>
+          <circle cx="40" cy="66" r="2" fill="#A78BFA" opacity="0.6"/>
+          <circle cx="18" cy="40" r="2" fill="#6C63FF" opacity="0.6"/>
+        </svg>
+      </div>
+      <div class="logo-info">
+        <div class="logo-name">App Icon</div>
+        <p class="logo-desc">Star compass on deep navy. The glow at center makes it feel alive — like a star pulsing on your home screen.</p>
+      </div>
+    </div>
+    <div class="logo-card">
+      <div class="logo-preview dark-bg">
+        <svg width="200" height="60" viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(4, 6)">
+            <circle cx="22" cy="24" r="16" stroke="#A78BFA" stroke-width="0.6" fill="none" opacity="0.25"/>
+            <path d="M 22 6 L 25 21 L 38 24 L 25 27 L 22 42 L 19 27 L 6 24 L 19 21 Z" fill="#A78BFA" opacity="0.12" stroke="#A78BFA" stroke-width="0.8"/>
+            <circle cx="22" cy="24" r="2.5" fill="#DDD6FE"/>
+          </g>
+          <text x="52" y="38" font-family="Cormorant Garamond, serif" font-size="34" font-weight="300" fill="#E8E4F0" letter-spacing="5">Astra</text>
+        </svg>
+      </div>
+      <div class="logo-info">
+        <div class="logo-name">Compact Lockup</div>
+        <p class="logo-desc">The star compass reduces cleanly. Works in navigation bars, social bios, watermarks.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>App Icon Lineup — All Candidates</h3>
+  <p>How each concept looks at app-icon scale on a phone screen:</p>
+  <div class="icon-grid">
+    <div class="icon-card">
+      <div class="icon-preview" style="background: linear-gradient(135deg, #0B1026, #12102E); border: 1px solid #252538;">
+        <svg width="48" height="48" viewBox="0 0 60 60" fill="none">
+          <path d="M 30 10 L 42 48 L 14 40 Z" stroke="#A78BFA" stroke-width="1.5" fill="rgba(167,139,250,0.08)"/>
+          <circle cx="30" cy="10" r="3" fill="#A78BFA"/>
+          <circle cx="42" cy="48" r="2.5" fill="#6C63FF"/>
+          <circle cx="14" cy="40" r="2" fill="#A78BFA" opacity="0.7"/>
+        </svg>
+      </div>
+      <div class="icon-label">Vela</div>
+    </div>
+    <div class="icon-card">
+      <div class="icon-preview" style="background: linear-gradient(135deg, #0B1026, #12102E); border: 1px solid #252538;">
+        <svg width="48" height="48" viewBox="0 0 60 60" fill="none">
+          <path d="M 12 46 Q 30 8, 48 30" stroke="#A78BFA" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M 14 14 Q 32 50, 50 22" stroke="#6C63FF" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <circle cx="30" cy="28" r="4.5" fill="#A78BFA"/>
+        </svg>
+      </div>
+      <div class="icon-label">Paran</div>
+    </div>
+    <div class="icon-card">
+      <div class="icon-preview" style="background: linear-gradient(135deg, #0B1026, #12102E); border: 1px solid #252538;">
+        <svg width="48" height="48" viewBox="0 0 60 60" fill="none">
+          <circle cx="30" cy="30" r="18" stroke="#A78BFA" stroke-width="0.8" fill="none" opacity="0.25"/>
+          <path d="M 30 10 L 33 27 L 48 30 L 33 33 L 30 50 L 27 33 L 12 30 L 27 27 Z" fill="#A78BFA" opacity="0.15" stroke="#A78BFA" stroke-width="1.2"/>
+          <circle cx="30" cy="30" r="3.5" fill="#DDD6FE"/>
+        </svg>
+      </div>
+      <div class="icon-label">Astra</div>
+    </div>
+    <div class="icon-card">
+      <div class="icon-preview" style="background: linear-gradient(135deg, #0B1026, #12102E); border: 1px solid #252538;">
+        <svg width="48" height="48" viewBox="0 0 60 60" fill="none">
+          <!-- Elara - Jupiter moon with orbital ring -->
+          <circle cx="30" cy="30" r="10" fill="#A78BFA" opacity="0.15" stroke="#A78BFA" stroke-width="1"/>
+          <ellipse cx="30" cy="30" rx="22" ry="8" stroke="#6C63FF" stroke-width="0.8" fill="none" opacity="0.4" transform="rotate(-20 30 30)"/>
+          <circle cx="30" cy="30" r="4" fill="#DDD6FE" opacity="0.8"/>
+        </svg>
+      </div>
+      <div class="icon-label">Elara</div>
+    </div>
+    <div class="icon-card">
+      <div class="icon-preview" style="background: linear-gradient(135deg, #0B1026, #12102E); border: 1px solid #252538;">
+        <svg width="48" height="48" viewBox="0 0 60 60" fill="none">
+          <!-- Sidra - Sidereal star pattern -->
+          <circle cx="30" cy="30" r="3" fill="#A78BFA"/>
+          <circle cx="30" cy="30" r="9" stroke="#A78BFA" stroke-width="0.6" fill="none" opacity="0.3" stroke-dasharray="2 3"/>
+          <circle cx="30" cy="30" r="18" stroke="#6C63FF" stroke-width="0.6" fill="none" opacity="0.2" stroke-dasharray="2 4"/>
+          <circle cx="18" cy="16" r="1.5" fill="#DDD6FE" opacity="0.5"/>
+          <circle cx="44" cy="22" r="1.8" fill="#A78BFA" opacity="0.4"/>
+          <circle cx="20" cy="44" r="1.3" fill="#6C63FF" opacity="0.4"/>
+          <circle cx="42" cy="42" r="1.6" fill="#DDD6FE" opacity="0.3"/>
+          <!-- Connecting lines -->
+          <line x1="18" y1="16" x2="30" y2="30" stroke="#A78BFA" stroke-width="0.4" opacity="0.2"/>
+          <line x1="44" y1="22" x2="30" y2="30" stroke="#A78BFA" stroke-width="0.4" opacity="0.2"/>
+          <line x1="20" y1="44" x2="30" y2="30" stroke="#6C63FF" stroke-width="0.4" opacity="0.2"/>
+        </svg>
+      </div>
+      <div class="icon-label">Sidra</div>
+    </div>
+    <div class="icon-card">
+      <div class="icon-preview" style="background: linear-gradient(135deg, #0B1026, #12102E); border: 1px solid #252538;">
+        <svg width="48" height="48" viewBox="0 0 60 60" fill="none">
+          <!-- Solara - Sun burst -->
+          <circle cx="30" cy="30" r="8" fill="#A78BFA" opacity="0.2" stroke="#A78BFA" stroke-width="1"/>
+          <circle cx="30" cy="30" r="4" fill="#FBBF24" opacity="0.7"/>
+          <circle cx="30" cy="30" r="15" stroke="#A78BFA" stroke-width="0.5" fill="none" opacity="0.15"/>
+          <!-- Rays -->
+          <line x1="30" y1="12" x2="30" y2="16" stroke="#A78BFA" stroke-width="1" opacity="0.5" stroke-linecap="round"/>
+          <line x1="30" y1="44" x2="30" y2="48" stroke="#A78BFA" stroke-width="1" opacity="0.5" stroke-linecap="round"/>
+          <line x1="12" y1="30" x2="16" y2="30" stroke="#A78BFA" stroke-width="1" opacity="0.5" stroke-linecap="round"/>
+          <line x1="44" y1="30" x2="48" y2="30" stroke="#A78BFA" stroke-width="1" opacity="0.5" stroke-linecap="round"/>
+          <line x1="17" y1="17" x2="20" y2="20" stroke="#6C63FF" stroke-width="0.8" opacity="0.3" stroke-linecap="round"/>
+          <line x1="40" y1="40" x2="43" y2="43" stroke="#6C63FF" stroke-width="0.8" opacity="0.3" stroke-linecap="round"/>
+          <line x1="43" y1="17" x2="40" y2="20" stroke="#6C63FF" stroke-width="0.8" opacity="0.3" stroke-linecap="round"/>
+          <line x1="17" y1="43" x2="20" y2="40" stroke="#6C63FF" stroke-width="0.8" opacity="0.3" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="icon-label">Solara</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- RECOMMENDATION -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-label">04 — My Take</div>
+  <h2>Ranking the Candidates</h2>
+
+  <table style="width:100%;border-collapse:collapse;margin:20px 0;font-size:13px;">
+    <thead>
+      <tr>
+        <th style="text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);padding:12px 16px;border-bottom:1px solid var(--border);">Rank</th>
+        <th style="text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);padding:12px 16px;border-bottom:1px solid var(--border);">Name</th>
+        <th style="text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);padding:12px 16px;border-bottom:1px solid var(--border);">Star Signal</th>
+        <th style="text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);padding:12px 16px;border-bottom:1px solid var(--border);">Brandability</th>
+        <th style="text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);padding:12px 16px;border-bottom:1px solid var(--border);">Why</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:14px 16px;color:var(--accent);font-weight:600;">1</td>
+        <td style="padding:14px 16px;color:var(--text);font-weight:600;">Vela</td>
+        <td style="padding:14px 16px;color:var(--teal);">★★★★★</td>
+        <td style="padding:14px 16px;color:var(--teal);">★★★★★</td>
+        <td style="padding:14px 16px;color:var(--text2);">4 letters, real constellation, sail = journey. Perfect balance of immediate star recognition and unique brandability.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:14px 16px;color:var(--accent);font-weight:600;">2</td>
+        <td style="padding:14px 16px;color:var(--text);font-weight:600;">Paran</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★★</td>
+        <td style="padding:14px 16px;color:var(--teal);">★★★★★</td>
+        <td style="padding:14px 16px;color:var(--text2);">Strongest insider credibility. The astrocartography community would love it. Less obvious to total newcomers.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:14px 16px;color:var(--accent);font-weight:600;">3</td>
+        <td style="padding:14px 16px;color:var(--text);font-weight:600;">Astra</td>
+        <td style="padding:14px 16px;color:var(--teal);">★★★★★</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★★</td>
+        <td style="padding:14px 16px;color:var(--text2);">Most instantly understood star-name. Cultural resonance is huge. Domain/handle availability is the main risk.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:14px 16px;color:var(--text3);">4</td>
+        <td style="padding:14px 16px;color:var(--text);">Elara</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★★</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★★</td>
+        <td style="padding:14px 16px;color:var(--text2);">Beautiful, Jupiter-moon theme is perfect. Less immediately "star-sounding" to casual users.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:14px 16px;color:var(--text3);">5</td>
+        <td style="padding:14px 16px;color:var(--text);">Sidra</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★</td>
+        <td style="padding:14px 16px;color:var(--teal);">★★★★★</td>
+        <td style="padding:14px 16px;color:var(--text2);">Deepest etymology, completely ownable. Star-connection requires knowledge of "sidereal."</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:14px 16px;color:var(--text3);">6</td>
+        <td style="padding:14px 16px;color:var(--text);">Astrid</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★★</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★</td>
+        <td style="padding:14px 16px;color:var(--text2);">Strong name-as-character angle. The "it's a human name" factor cuts both ways.</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:14px 16px;color:var(--text3);">7</td>
+        <td style="padding:14px 16px;color:var(--text);">Solara</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★★</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★</td>
+        <td style="padding:14px 16px;color:var(--text2);">Warm and travel-y. Some energy company conflicts. "Sol" = sun, not stars — slight mismatch.</td>
+      </tr>
+      <tr>
+        <td style="padding:14px 16px;color:var(--text3);">8</td>
+        <td style="padding:14px 16px;color:var(--text);">Stellavie</td>
+        <td style="padding:14px 16px;color:var(--teal);">★★★★★</td>
+        <td style="padding:14px 16px;color:var(--gold);">★★★</td>
+        <td style="padding:14px 16px;color:var(--text2);">Premium French luxury feel. 3 syllables and spelling-from-hearing are the downsides.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p style="margin-top:24px;">My honest take: <strong>Vela</strong> is the strongest all-around pick — it's a real constellation, it's four letters, it sounds beautiful, and the "sails" meaning is a perfect metaphor for an app about navigating by the stars. <strong>Paran</strong> is the boldest pick — it would earn instant respect from the astrocartography community and give Helena Woods something to genuinely love. <strong>Astra</strong> is the safest pick — everyone immediately gets "stars" — but domain/handle availability will make or break it.</p>
+
+  <p>Next step: check domain and handle availability for your top 2-3 favorites, then lock it in.</p>
+</div>
+
+</div><!-- end page -->
+</body>
+</html>

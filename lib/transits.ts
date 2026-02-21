@@ -28,6 +28,7 @@ import {
   findNearestLines,
 } from "./astronomy";
 import { filterNearbyByImpact } from "./settings";
+import { WORLD_CITIES } from "./cities";
 import { classifyLine } from "./lineClassification";
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -274,6 +275,33 @@ function getPlanetLabel(planet: PlanetName): string {
   return planet.charAt(0).toUpperCase() + planet.slice(1);
 }
 
+/** Tiered window type and short label per transit + aspect (plan 1.2) */
+function getWindowTypeAndLabel(transitPlanet: PlanetName, aspect: AspectType): {
+  windowType: "benefic" | "evolutionary" | "neutral";
+  shortLabel: string;
+} {
+  const isHarmonious = aspect === "trine" || aspect === "sextile";
+  const isBeneficPlanet = transitPlanet === "jupiter" || transitPlanet === "venus";
+  const isHeavyPlanet = transitPlanet === "saturn" || transitPlanet === "pluto" || transitPlanet === "uranus" || transitPlanet === "mars";
+
+  if (isBeneficPlanet && (isHarmonious || aspect === "conjunction")) {
+    return { windowType: "benefic", shortLabel: isHarmonious ? "Abundance Peak" : "Optimal Window for Flow" };
+  }
+  if (transitPlanet === "saturn") {
+    return { windowType: "evolutionary", shortLabel: "Structure Phase" };
+  }
+  if (transitPlanet === "pluto") {
+    return { windowType: "evolutionary", shortLabel: "Deep Transformation" };
+  }
+  if (transitPlanet === "uranus") {
+    return { windowType: "evolutionary", shortLabel: "Sudden Pivot" };
+  }
+  if (transitPlanet === "mars") {
+    return { windowType: "evolutionary", shortLabel: "Action Phase" };
+  }
+  return { windowType: "neutral", shortLabel: "Activation Window" };
+}
+
 function getAspectQuality(aspect: AspectType): "harmonious" | "challenging" | "neutral" {
   switch (aspect) {
     case "conjunction": return "neutral";
@@ -517,6 +545,7 @@ export function findActivationWindows(
       const transitLabel = getPlanetLabel(data.transitPlanet);
       const natalLabel = getPlanetLabel(data.natalPlanet);
       const sourceLabel = data.source === "progression" ? "Progressed" : "Transiting";
+      const { windowType, shortLabel } = getWindowTypeAndLabel(data.transitPlanet, data.aspect);
 
       windows.push({
         natalPlanet: data.natalPlanet,
@@ -528,6 +557,8 @@ export function findActivationWindows(
         endDate: dateToISOString(prevDate),
         exactDate: dateToISOString(exactDate),
         peakDescription: `${sourceLabel} ${transitLabel} ${getAspectSymbol(data.aspect)} natal ${natalLabel} (exact ${dateToISOString(exactDate)})`,
+        windowType,
+        shortLabel,
       });
     };
 
@@ -548,6 +579,140 @@ export function findActivationWindows(
   }
 
   return windows.sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
+/** Range options for transit synthesis */
+export type TransitSynthesisRange = "1m" | "3m" | "1y";
+
+export interface TransitSynthesisCity {
+  name: string;
+  country: string;
+  lat: number;
+  lon: number;
+  score: number;
+  topWindow: ActivationWindow | null;
+  windowCount: number;
+}
+
+export interface TransitSynthesis {
+  /** Cities with strong benefic activations (Jupiter/Venus) — optimal for flow */
+  optimal: TransitSynthesisCity[];
+  /** Cities with strong heavy activations (Saturn/Pluto/Uranus/Mars) — intense/transformative */
+  intense: TransitSynthesisCity[];
+}
+
+/**
+ * Aggregate best vs intense places to go over a time range (1m, 3m, 1y).
+ * Uses findActivationWindows and city natal-line proximity.
+ */
+export function getTransitSynthesis(
+  birthDate: string,
+  birthTime: string,
+  birthLongitude: number,
+  range: TransitSynthesisRange,
+  cities: { name: string; country: string; lat: number; lon: number }[] = WORLD_CITIES.map((c) => ({
+    name: c.name, country: c.country, lat: c.latitude, lon: c.longitude,
+  })),
+  hideMildImpacts: boolean = false
+): TransitSynthesis {
+  const startDate = new Date();
+  const days = range === "1m" ? 31 : range === "3m" ? 92 : 365;
+  const endDate = addDays(startDate, days);
+  const windows = findActivationWindows(
+    birthDate, birthTime, birthLongitude, startDate, endDate, 14
+  );
+
+  const birth = parseDateParts(birthDate);
+  const time = parseTimeParts(birthTime);
+  const natalPositions = calculatePlanetPositions(
+    birth.year, birth.month, birth.day, time.hour, time.minute, birthLongitude
+  );
+  const gst = calculateGST(
+    birth.year, birth.month, birth.day, time.hour, time.minute, birthLongitude
+  );
+  const astroLines = generateAstroLines(natalPositions, gst);
+
+  const beneficPlanets = new Set<PlanetName>(["jupiter", "venus"]);
+  const heavyPlanets = new Set<PlanetName>(["saturn", "pluto", "uranus", "mars"]);
+  const beneficAspects = new Set<AspectType>(["trine", "sextile", "conjunction"]);
+
+  const optimalScores: { city: typeof cities[0]; score: number; topWindow: ActivationWindow | null; windowCount: number }[] = [];
+  const intenseScores: { city: typeof cities[0]; score: number; topWindow: ActivationWindow | null; windowCount: number }[] = [];
+
+  for (const city of cities) {
+    const nearby = filterNearbyByImpact(
+      findNearestLines(astroLines, city.lat, city.lon, 15),
+      hideMildImpacts
+    );
+    const nearbyPlanets = new Set(nearby.map((l) => l.planet));
+
+    let beneficScore = 0;
+    let heavyScore = 0;
+    let bestBenefic: ActivationWindow | null = null;
+    let bestBeneficS = 0;
+    let bestHeavy: ActivationWindow | null = null;
+    let bestHeavyS = 0;
+    let beneficCount = 0;
+    let heavyCount = 0;
+
+    for (const w of windows) {
+      if (!nearbyPlanets.has(w.natalPlanet)) continue;
+
+      const lineDist = nearby.find((l) => l.planet === w.natalPlanet)?.distance ?? 1000;
+      const proximity = Math.exp(-0.693 * lineDist / 310);
+      const transitWeight = TRANSIT_FAVORABILITY_SCORE[w.transitPlanet] ?? 0;
+      const aspectWeight = ASPECT_FAVORABILITY_SCORE[w.aspect];
+
+      if (beneficPlanets.has(w.transitPlanet) && beneficAspects.has(w.aspect)) {
+        const s = (transitWeight + aspectWeight + 1) * proximity;
+        beneficScore += s;
+        beneficCount++;
+        if (s > bestBeneficS) { bestBeneficS = s; bestBenefic = w; }
+      }
+      if (heavyPlanets.has(w.transitPlanet)) {
+        const s = (Math.abs(transitWeight) + Math.abs(aspectWeight) + 1) * proximity;
+        heavyScore += s;
+        heavyCount++;
+        if (s > bestHeavyS) { bestHeavyS = s; bestHeavy = w; }
+      }
+    }
+
+    if (beneficScore > 0) {
+      optimalScores.push({
+        city,
+        score: beneficScore,
+        topWindow: bestBenefic,
+        windowCount: beneficCount,
+      });
+    }
+    if (heavyScore > 0) {
+      intenseScores.push({
+        city,
+        score: heavyScore,
+        topWindow: bestHeavy,
+        windowCount: heavyCount,
+      });
+    }
+  }
+
+  const toResult = (list: typeof optimalScores): TransitSynthesisCity[] =>
+    list
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map(({ city, score, topWindow, windowCount }) => ({
+        name: city.name,
+        country: city.country,
+        lat: city.lat,
+        lon: city.lon,
+        score,
+        topWindow,
+        windowCount,
+      }));
+
+  return {
+    optimal: toResult(optimalScores),
+    intense: toResult(intenseScores),
+  };
 }
 
 /**
