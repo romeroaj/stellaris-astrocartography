@@ -139,7 +139,7 @@ const AstroMap = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMap(
         // Hidden lines stay mounted as invisible native overlays to work
         // around a react-native-maps iOS bug where unmounting a <Polyline>
         // does not remove the underlying MKOverlay from the map.
-        if (line.hidden) {
+        if ((line as any).hidden) {
           return (
             <Polyline
               key={line.id}
@@ -192,7 +192,7 @@ const AstroMap = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMap(
             lineDashPattern={dash}
             tappable={!!onLinePress}
             onPress={() => onLinePress?.(line)}
-            zIndex={line.sourceId === "transit" ? 2 : (isSynastryOverlap && line.isOverlapping ? 10 : bondMode === "synastry" ? 1 : 0)}
+            zIndex={(line.sourceId as string) === "transit" ? 2 : (isSynastryOverlap && line.isOverlapping ? 10 : bondMode === "synastry" ? 1 : 0)}
           />
         );
       })}
@@ -210,6 +210,7 @@ const AstroMap = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMap(
             title={`${hotspot.emoji} ${hotspot.city}`}
             description={hotspot.details}
             onPress={() => onHotspotPress?.(hotspot)}
+            tracksViewChanges={false}
           >
             <View style={[
               styles.hotspotMarker,
@@ -249,6 +250,7 @@ const AstroMap = forwardRef<AstroMapHandle, AstroMapProps>(function AstroMap(
         coordinate={{ latitude: birthLat, longitude: birthLon }}
         title="Birth Location"
         pinColor={Colors.dark.primary}
+        tracksViewChanges={false}
       />
     </MapView>
   );
